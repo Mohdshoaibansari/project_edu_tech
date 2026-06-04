@@ -6,7 +6,85 @@
 
 ## [Unreleased]
 
-### 2026-06-05 — Initial Specification Created
+### 2026-06-05 (v2) — Architecture Review & Engine Designs
+
+- **Added:** [`11-architecture-review.md`](./11-architecture-review.md) — Architecture Review & Gap Analysis
+  - Comprehensive audit of ALL hardcoded business rules (attendance statuses, grading, academic structure, workflows, report cards, custom fields, notifications)
+  - 6 architectural weaknesses identified (enum-based variability, flat config, no domain events, missing engines, single DB limits, AI lock-in)
+  - 10 improvement recommendations with priorities
+
+- **Added:** [`12-configuration-engine.md`](./12-configuration-engine.md) — Configuration Engine Design
+  - Hierarchical JSON Schema-validated configuration (replaces flat key-value)
+  - Full attendance statuses configuration with per-status weights, labels (i18n), colors
+  - Grading scale configuration (grade bands, percentage, GPA, rubric — all in one schema)
+  - Academic calendar configuration (semester/trimester/quarterly with terms, exams, holidays)
+  - Configuration inheritance (templates → tenants with overrides)
+  - Admin UI design with live preview
+
+- **Added:** [`13-rules-engine.md`](./13-rules-engine.md) — Rules Engine Design
+  - JSON-based condition/action rule evaluation
+  - Grade conversion rules, attendance calculation rules, promotion eligibility rules
+  - Priority-based rule matching (first-match + all-matches modes)
+  - Custom function registry for extensibility
+  - Admin UI with rule tester
+
+- **Added:** [`14-workflow-engine.md`](./14-workflow-engine.md) — Workflow Engine Design
+  - Configurable state machine per workflow type per tenant
+  - Three workflow examples: School A (Teacher→Principal), School B (Teacher→Coordinator→Principal), Conditional (skip Coordinator for ≤3 days)
+  - Five actor resolution types (role, specific_user, relationship, dynamic, any_admin)
+  - Transition conditions, side-effect actions, full history tracking
+  - Visual Workflow Designer UI
+
+- **Added:** [`15-metadata-engine.md`](./15-metadata-engine.md) — Metadata Engine Design
+  - Entity-Attribute-Value with JSONB for zero-schema-change custom fields
+  - Field definitions registry with types, validation, enum values, UI hints
+  - Dynamic form builder with conditional sections
+  - GIN-indexed JSONB querying for searchable custom fields
+  - Migration path from fixed columns to metadata
+
+- **Added:** [`16-template-engine.md`](./16-template-engine.md) — Template Engine Design
+  - Handlebars/React-PDF based document generation
+  - Complete report card template with school branding, dynamic data binding, conditional sections
+  - HTML→PDF via Puppeteer, HTML output, DOCX output
+  - Template data schema for validation
+  - Template Designer UI with component palette + live preview
+
+- **Added:** [`17-multi-tenant-strategy.md`](./17-multi-tenant-strategy.md) — Multi-Tenant Strategy Deep Dive
+  - Hybrid 4-tier approach: Shared Schema (90%) → Separate Schema (5%) → Dedicated DB (3%) → Dedicated Instance (2%)
+  - Connection pool manager with tier-based routing
+  - Backward-compatible migration rules
+  - Tenant schema registry, cross-tenant operations, data residency
+  - Decision matrix for tier selection
+
+- **Added:** [`18-domain-driven-design.md`](./18-domain-driven-design.md) — DDD Bounded Contexts
+  - 8 bounded contexts: Identity, Academic Structure, Attendance, Assessment, Leave, Communication, Configuration, Reporting
+  - Context map with dependency directions
+  - Integration patterns: Shared Kernel, Published Language (OpenAPI), Event-Driven, Anti-Corruption Layer
+  - Revised module structure following DDD (domain/application/infrastructure/interfaces)
+  - Aggregate root identification per context
+
+- **Added:** [`19-ai-readiness.md`](./19-ai-readiness.md) — AI Readiness Assessment
+  - AI provider abstraction layer (OpenAI, Anthropic, Google, local/Ollama)
+  - Configurable AI task definitions per tenant per task
+  - Multi-channel abstraction (Telegram, WhatsApp, Web Chat, Voice)
+  - Per-tenant AI configuration (model mapping, cost limits, data policy, language)
+  - Usage/cost tracking and observability
+  - Vendor lock-in prevention checklist
+
+- **Added:** [`20-extensibility-migration.md`](./20-extensibility-migration.md) — Extensibility Review & Migration Plan
+  - 10-area risk matrix (grading, attendance, reports, curriculum, workflows, notifications, payments, integrations, regulations, i18n)
+  - 4 anti-patterns in current spec with fixes
+  - Migration plan: Phase 0 (Foundation Refactoring) → Phase 1A-D (Engines) → Phase 2 (Metadata+Template) → Phase 3 (AI Abstraction)
+  - Strangler Fig pattern for incremental migration
+  - Backward compatibility guarantees (API versioning, additive migrations, feature flags, dual-write, rollback)
+  - What changes vs what stays summary table
+  - 10 final recommendations
+
+- **Updated:** [`README.md`](./README.md) — Spec index restructured with foundation + review sections, added critical warning about implementation readiness
+
+---
+
+### 2026-06-05 (v1) — Initial Specification Created
 
 - **Added:** [`01-prd.md`](./01-prd.md) — Product Requirements Document
   - Executive summary, problem statement (monolith → decoupled)

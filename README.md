@@ -1,22 +1,40 @@
 # EduTech — AI-Powered School Operations Platform
 
-> **Multi-tenant, decoupled frontend-backend platform for Attendance, Homework, Exams, Leave Management, and AI Chatbot.**
+> **Multi-tenant SaaS platform for school operations with engine-driven configurability.**
+> Supports radically different schools without code changes.
+
+---
+
+## ⚠️ IMPORTANT: Read Before Implementation
+
+The initial specification (docs 1–10) assumed relatively uniform school requirements. The **Architecture Review (docs 11–20)** identified critical gaps. **Do not start implementation** without reviewing these findings.
+
+**Start here:** [`docs/spec/11-architecture-review.md`](./docs/spec/11-architecture-review.md)
 
 ---
 
 ## 🎯 Project Overview
 
-EduTech is a SaaS platform that unifies school operations into a single, scalable system. It serves multiple schools from one backend while giving each school its own customized frontend.
+EduTech is a SaaS platform that unifies school operations. It serves **radically different schools** from one backend through an **engine-first architecture**:
+
+| Engine | Purpose | School Variability Solved |
+|--------|---------|--------------------------|
+| **Configuration Engine** | Hierarchical config with JSON Schema | Attendance types, grading scales, academic calendars |
+| **Rules Engine** | JSON-based condition/action evaluation | Grade calculation, attendance aggregation, promotion eligibility |
+| **Workflow Engine** | Configurable state machines | Leave approvals, corrections, admissions |
+| **Metadata Engine** | Custom fields without schema changes | Per-school student/teacher fields |
+| **Template Engine** | Handlebars/PDF document generation | Report cards, certificates, letters |
 
 ### Key Architecture Decisions
 
 | Decision | Description |
 |----------|-------------|
-| **Decoupled Frontend-Backend** | Shared Node.js backend API + per-client Next.js frontends |
-| **Multi-Tenant** | One database serves all schools with `tenant_id` isolation |
-| **API-First** | OpenAPI 3.x contracts defined before implementation |
-| **AI-Powered** | LangGraph agent for Telegram chatbot + auto-grading + homework generation |
-| **Enterprise Auth** | SuperTokens (identity) + JWT (session) + RBAC with fine-grained permissions |
+| **Decoupled Frontend-Backend** | Shared backend + per-client Next.js frontends |
+| **Hybrid Multi-Tenant** | Shared schema (90%) → Dedicated instances (2%) |
+| **Engine-First Architecture** | Engines built BEFORE business modules |
+| **Domain Events** | Contexts communicate via event bus, not direct imports |
+| **AI Abstraction** | OpenAI, Anthropic, Google, local models behind single interface |
+| **Configuration over Code** | Zero hardcoded business rules |
 
 ---
 
@@ -25,74 +43,70 @@ EduTech is a SaaS platform that unifies school operations into a single, scalabl
 ```
 project_edu_tech/
 ├── docs/
-│   └── spec/                          # ← Specification hub (all docs are here)
+│   └── spec/                          # ← Specification hub
 │       ├── README.md                  # Spec index + quick links
-│       ├── 01-prd.md                  # Product Requirements Document
-│       ├── 02-spec-template.md        # Spec-Driven Development Template
-│       ├── 03-architecture.md         # System Architecture
-│       ├── 04-backend-spec.md         # Backend Specification
-│       ├── 05-frontend-spec.md        # Frontend Specification
-│       ├── 06-auth-spec.md            # Authentication & Authorization
-│       ├── 07-multi-tenant-spec.md    # Multi-Tenant Architecture
-│       ├── 08-api-contracts.md        # API Contracts
-│       ├── 09-implementation-roadmap.md # Implementation Roadmap
-│       └── 10-changelog.md            # Changelog
+│       ├── 01-10_*.md                 # Foundation specs (v1)
+│       └── 11-20_*.md                 # Architecture review + engines (v2) ⭐
 │
-├── server/                            # Backend API (NestJS) — COMING IN PHASE 1
-├── client/                            # Frontend (Next.js) — COMING IN PHASE 1
-├── ai-service/                        # Python AI Service — COMING IN PHASE 1
-├── contracts/                         # OpenAPI YAML files — COMING IN PHASE 1
-└── docker/                            # Docker Compose — COMING IN PHASE 1
+├── server/                            # Backend API (NestJS) — Phase 0
+├── client/                            # Frontend (Next.js) — Phase 1
+├── ai-service/                        # Python AI Service — Phase 3
+└── contracts/                         # OpenAPI YAML files — Phase 0
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Read the Specs
+### Read the Specs (Recommended Order)
 
-1. **New to the project?** Start at [`docs/spec/01-prd.md`](./docs/spec/01-prd.md)
-2. **Want to understand architecture?** See [`docs/spec/03-architecture.md`](./docs/spec/03-architecture.md)
-3. **Building a feature?** Use the template in [`docs/spec/02-spec-template.md`](./docs/spec/02-spec-template.md)
-4. **Need API details?** See [`docs/spec/08-api-contracts.md`](./docs/spec/08-api-contracts.md)
+1. **[Architecture Review](./docs/spec/11-architecture-review.md)** — What's wrong with the current design
+2. **[Configuration Engine](./docs/spec/12-configuration-engine.md)** — Foundation for all per-school variability
+3. **[Extensibility & Migration](./docs/spec/20-extensibility-migration.md)** — How to get from here to there
+4. **[DDD Bounded Contexts](./docs/spec/18-domain-driven-design.md)** — Proper domain boundaries
+
+### Full Index
+
+See [`docs/spec/README.md`](./docs/spec/README.md) for the complete 20-document index.
 
 ### Implementation Status
 
-🟡 **Pre-Implementation** — Specifications are drafted. Implementation begins in Phase 1.
+🟡 **Pre-Implementation, Architecture Review Complete** — Foundation refactoring (Phase 0) is the next step.
 
 ---
 
-## 📋 Key Feature Modules
+## 📋 Modules & Variability Support
 
-| Module | Description | Phase |
-|--------|-------------|-------|
-| **Attendance** | Teacher roll-call, correction workflow, per-grade configurable | 1 |
-| **Homework** | Create, distribute, submit, grade, AI-generate, AI-grade | 1 |
-| **Exams** | Create exams, enter scores, pass/fail tracking, statistics | 1 |
-| **Leave** | Apply, multi-level approve (Teacher → Principal), tracking | 1 |
-| **Notifications** | Absence alerts, homework alerts, leave updates | 1 |
-| **Dashboards** | Teacher, Principal, Parent, Student role-specific dashboards | 1 |
-| **Reports** | Daily/Monthly/Low-attendance reports, CSV/Excel/PDF export | 1 |
-| **AI Chatbot** | Telegram bot for attendance queries, leave applications | 1 |
-| **Admin** | User management, permissions UI, subject/class/section config | 1 |
-| **Tenant Mgmt** | Onboard/offboard schools, per-tenant config, feature flags | 2 |
+| Module | School A | School B | School C | School D |
+|--------|----------|----------|----------|----------|
+| **Attendance** | Present/Absent/Late | + Half Day/Medical | Period-based | Custom statuses |
+| **Grading** | A+ to F bands | Percentage | GPA (4.0) | Rubric-based |
+| **Academic Structure** | Semester | Trimester | Quarterly | Custom terms |
+| **Workflow** | Teacher→Principal | Teacher→Coord→Principal | Conditional (≤3d skip) | Custom chains |
+| **Report Cards** | Standard layout | Detailed layout | GPA-focused | Custom templates |
 
 ---
 
-## 👥 Roles & Permissions
+## 🏗️ Architecture — Engines Layer
 
-| Role | Scope |
-|------|-------|
-| `SUPER_ADMIN` | Platform-wide, cross-tenant |
-| `ADMIN` | All resources within own tenant |
-| `PRINCIPAL` | School-wide view + management |
-| `TEACHER` | Assigned classes only |
-| `PARENT` | Own children's data only |
-| `STUDENT` | Own data only |
-| `STAFF` | Own attendance + leave |
-| `COUNSELOR` | Read-only student data |
-
-> Full permission matrix: [`docs/spec/06-auth-spec.md`](./docs/spec/06-auth-spec.md)
+```
+┌─────────────────────────────────────────────────────────┐
+│                   BUSINESS CONTEXTS                       │
+│  Identity │ Academic │ Attendance │ Assessment │ Leave   │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│                   ENGINE LAYER                            │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ Config   │ │ Rules    │ │ Workflow │ │ Metadata │   │
+│  │ Engine   │ │ Engine   │ │ Engine   │ │ Engine   │   │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
+│  ┌──────────┐ ┌──────────────────────────────────────┐  │
+│  │ Template │ │           EVENT BUS                   │  │
+│  │ Engine   │ │                                      │  │
+│  └──────────┘ └──────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -104,23 +118,23 @@ project_edu_tech/
 | **Database** | PostgreSQL 16 + Redis 7 |
 | **Frontend** | Next.js 14 + Tailwind CSS + shadcn/ui |
 | **State** | TanStack Query + Zustand |
-| **AI** | FastAPI + LangGraph + LangChain |
+| **AI** | Provider abstraction (OpenAI/Anthropic/Google/Local) + LangGraph for chatbot |
 | **Auth** | SuperTokens + JWT |
-| **Queue** | BullMQ |
-| **Storage** | S3 / MinIO |
+| **Templates** | Handlebars + Puppeteer (PDF) |
+| **Events** | Redis Pub/Sub → BullMQ (Phase 3) |
 
 ---
 
 ## 📐 Development Principles
 
-1. **Spec First, Code Second** — No implementation without an approved spec
-2. **Backend is Source of Truth** — All security decisions on the backend
-3. **API-First Design** — Design APIs around business capabilities
-4. **Domain-Oriented Modules** — Code organized by business domain, not technical layer
-5. **Contract-Driven** — OpenAPI contracts as the bridge between frontend and backend
-6. **Configuration-Driven** — No hardcoded business rules; everything per-tenant configurable
-7. **Zero Trust** — Every request independently authenticated and authorized
+1. **Configuration over Code** — Zero hardcoded business rules
+2. **Events over Direct Calls** — Contexts communicate via event bus
+3. **Abstractions over Implementations** — AI, notifications, storage behind interfaces
+4. **Metadata over Schema Changes** — Custom fields via JSONB, not ALTER TABLE
+5. **Templates over Hardcoded Views** — Report cards, certificates from templates
+6. **Spec First, Code Second** — No implementation without an approved spec
+7. **Backend is Source of Truth** — All security decisions on the backend
 
 ---
 
-> **Status:** Pre-Implementation | **Branch:** `spec/prd-and-template` | **Last Updated:** 2026-06-05
+> **Status:** Pre-Implementation | **Branch:** `spec/prd-and-template` | **Last Updated:** 2026-06-05 (v2)
