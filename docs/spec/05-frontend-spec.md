@@ -131,7 +131,189 @@ class TenantConfigService {
 
 ---
 
-## 5.3 Feature Module Structure
+## 5.3 Dynamic Config-Driven UI ⭐ NEW
+
+### Principle: UI Adapts to Tenant Configuration
+
+**No hardcoded statuses, grades, or workflow steps in the UI.** Everything is rendered from the tenant configuration fetched at runtime.
+
+### Dynamic Attendance Status Toggles
+
+```typescript
+// modules/attendance/components/RollCallGrid.tsx
+export function RollCallGrid({ classId, date }: Props) {
+  // Fetch attendance statuses from Configuration Engine (NOT hardcoded!)
+  const { data: statusConfig } = useAttendanceStatuses();
+  const { data: records } = useAttendance(classId, date);
+  
+  // School A: [{ code: 'PRESENT', color: '#10B981', ... }, { code: 'ABSENT', ... }, { code: 'LATE', ... }]
+  // School B: [{ ... }, { code: 'HALF_DAY', ... }, { code: 'MEDICAL_LEAVE', ... }]
+  const statuses = statusConfig?.statuses ?? [];
+  
+  return (
+    <div className="grid gap-1">
+      {records?.map(record => (
+        <RollCallRow key={record.student_id}>
+          <span>{record.student_name}</span>
+          <div className="flex gap-1">
+            {/* Render toggles dynamically from config */}
+            {statuses.map(status => (
+              <StatusToggle
+                key={status.code}
+                active={record.status_code === status.code}
+                color={status.color}
+                icon={status.icon}           // 'check-circle', 'x-circle', 'clock'
+                label={status.label.en}       // i18n-aware
+                onClick={() => markAttendance(record.student_id, status.code)}
+              />
+            ))}
+          </div>
+        </RollCallRow>
+      ))}
+    </div>
+  );
+}
+```
+
+### Dynamic Grade Display
+
+```typescript
+// shared/components/data/GradeDisplay.tsx
+export function GradeDisplay({ score, maxScore, tenantId }: Props) {
+  const { data: gradingScale } = useGradingScale(tenantId);
+  
+  if (!gradingScale) return <Skeleton />;
+  
+  switch (gradingScale.type) {
+    case 'grade_bands':   // School A: Show A+, A, B+ badge
+      const grade = findGradeBand(score, gradingScale.bands);
+      return (
+        <Badge style={{ backgroundColor: grade.color }}>
+          {grade.label}
+        </Badge>
+      );
+    
+    case 'percentage':    // School B: Show 85% progress bar
+      const pct = (score / maxScore) * 100;
+      return (
+        <div className="flex items-center gap-2">
+          <Progress value={pct} />
+          <span>{pct.toFixed(1)}%</span>
+        </div>
+      );
+    
+    case 'gpa':           // School C: Show 3.7 GPA
+      const gpa = calculateGPA(score, gradingScale);
+      return <span className="text-2xl font-bold">{gpa.toFixed(1)}</span>;
+    
+    case 'rubric':         // School D: Show rubric scores
+      return <RubricDisplay criteria={gradingScale.criteria} scores={score} />;
+    
+    default:
+      return <span>{score} / {maxScore}</span>;
+  }
+}
+```
+
+### Dynamic Workflow Stepper
+
+```typescript
+// shared/components/workflow/WorkflowStepper.tsx
+export function WorkflowStepper({ instanceId }: Props) {
+  // Fetch workflow status — transitions are tenant-defined, not hardcoded!
+  const { data: status } = useWorkflowStatus(instanceId);
+  const { data: transitions } = useAvailableTransitions(instanceId);
+  
+  return (
+    <div>
+      {/* Render workflow history trail */}
+      <ol className="space-y-2">
+        {status?.history.map((step, i) => (
+          <li key={i} className="flex items-center gap-2">
+            <StatusBadge state={step.to_state_code} />
+            <span className="text-sm text-muted-foreground">
+              by {step.actor_name} — {formatDate(step.timestamp)}
+            </span>
+            {step.comment && <p className="text-sm italic">{step.comment}</p>}
+          </li>
+        ))}
+      </ol>
+      
+      {/* Render available actions from Workflow Engine — configurable per school! */}
+      <div className="flex gap-2 mt-4">
+        {transitions?.map(t => (
+          <Button
+            key={t.id}
+            variant={t.name === 'Reject' ? 'destructive' : 'default'}
+            onClick={() => executeTransition(t.name)}
+          >
+            {t.name}
+          </Button>
+        ))}
+        {/* School A shows: [Approve] [Reject] */}
+        {/* School B shows: [Forward to Coordinator] [Reject] */}
+        {/* School C shows: [Forward to Principal] [Reject]  (if ≤3 days, coordinator skipped) */}
+      </div>
+    </div>
+  );
+}
+```
+
+### Config-Driven Form Generation
+
+```typescript
+// shared/forms/DynamicForm.tsx
+export function DynamicForm({ formCode, entityId, onSubmit }: Props) {
+  // Fetch form config from Metadata Engine — layout + fields are tenant-defined!
+  const { data: formConfig } = useFormConfig(formCode);
+  
+  if (!formConfig) return <Skeleton />;
+  
+  return (
+    <Form {...form}>
+      {formConfig.sections.map(section => {
+        // Check visibility condition
+        if (section.visibility_condition && !evaluateCondition(section.visibility_condition, values)) {
+          return null;
+        }
+        
+        return (
+          <fieldset key={section.title}>
+            <legend>{section.title}</legend>
+            {section.fields.map(field => (
+              <FormField
+                key={field.field_code}
+                name={field.field_code}
+                render={({ field: formField }) => {
+                  // Render correct input based on field definition from Metadata Engine
+                  switch (field.definition?.field_type) {
+                    case 'string': return <Input {...formField} />;
+                    case 'enum': return (
+                      <Select {...formField}>
+                        {field.definition.enum_values?.map((ev: any) => (
+                          <SelectItem key={ev.value} value={ev.value}>{ev.label.en}</SelectItem>
+                        ))}
+                      </Select>
+                    );
+                    case 'date': return <DatePicker {...formField} />;
+                    case 'boolean': return <Switch {...formField} />;
+                    case 'number': return <Input type="number" {...formField} />;
+                    default: return <Input {...formField} />;
+                  }
+                }}
+              />
+            ))}
+          </fieldset>
+        );
+      })}
+    </Form>
+  );
+}
+```
+
+---
+
+## 5.4 Feature Module Structure
 
 Each feature module follows a consistent, AI-agent-friendly structure:
 
@@ -172,7 +354,7 @@ export type { AttendanceRecord } from './types/attendance.types';
 
 ---
 
-## 5.4 Shared Design System
+## 5.5 Shared Design System
 
 ### Component Library (shadcn/ui)
 
@@ -242,7 +424,7 @@ interface DataTableProps<T> {
 
 ---
 
-## 5.5 State Management
+## 5.6 State Management
 
 ### Server State (TanStack Query)
 
@@ -327,7 +509,7 @@ interface AuthUIState {
 
 ---
 
-## 5.6 Feature Flag Rendering
+## 5.7 Feature Flag Rendering
 
 ```typescript
 // components/FeatureGate.tsx
@@ -375,7 +557,7 @@ export function PermissionGate({
 
 ---
 
-## 5.7 Generated API Client
+## 5.8 Generated API Client
 
 ### Contract-First Approach
 
@@ -417,7 +599,7 @@ export function useAttendance(classId: string, date: string) {
 
 ---
 
-## 5.8 States Every Component Must Handle
+## 5.9 States Every Component Must Handle
 
 | State | Visual | Implementation |
 |-------|--------|---------------|
@@ -430,7 +612,7 @@ export function useAttendance(classId: string, date: string) {
 
 ---
 
-## 5.9 Accessibility Standards
+## 5.10 Accessibility Standards
 
 - Semantic HTML: `<header>`, `<nav>`, `<main>`, `<section>`, `<article>`
 - All form inputs have associated `<label>`
@@ -442,7 +624,7 @@ export function useAttendance(classId: string, date: string) {
 
 ---
 
-## 5.10 Performance Standards
+## 5.11 Performance Standards
 
 - Route-level code splitting (Next.js automatic)
 - Images: `next/image` with lazy loading, WebP format

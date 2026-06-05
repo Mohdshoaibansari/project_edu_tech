@@ -1,8 +1,8 @@
 # 1. Product Requirements Document (PRD)
 
 > **Product:** EduTech — AI-Powered School Operations Platform  
-> **Version:** 1.0.0  
-> **Status:** Draft — Pre-Implementation  
+> **Version:** 2.0.0  
+> **Status:** Draft — Post-Architecture-Review  
 > **Date:** 2026-06-05  
 > **Author:** Architecture & Engineering Team  
 
@@ -10,18 +10,24 @@
 
 ## 1.1 Executive Summary
 
-EduTech is a **multi-tenant, AI-powered school operations platform** that unifies Attendance Management, Homework Management, Exam Tracking, Leave Management, Parent Communication, and AI Chatbot capabilities into a single, scalable system.
+EduTech is a **multi-tenant, engine-driven SaaS platform** for school operations. It serves **radically different schools** — from small K-12 schools with simple Present/Absent attendance to large chains with period-based tracking, GPA grading, and multi-step approval workflows — all from a **single shared backend** without code changes.
 
-The platform is architected as **decoupled frontend and backend applications**:
-- **Backend:** A shared Node.js API server that serves ALL client schools through a single multi-tenant deployment
-- **Frontend:** Per-client customizable Next.js applications that consume the shared backend APIs
+### Platform Architecture
 
-This architecture enables:
-- One backend codebase, one database cluster — serving unlimited schools
-- Each school gets a customized frontend (branding, feature set, workflows)
-- Centralized security, auth, and data management
-- Independent scaling of frontend and backend layers
-- AI capabilities shared across all tenants
+- **Backend:** A shared NestJS API server with an **engine layer** (Configuration, Rules, Workflow, Metadata, Template Engines) that makes every school-specific behavior configurable, not hardcoded
+- **Frontend:** Per-client Next.js deployments that consume the shared APIs and dynamically adapt to each school's configuration (attendance statuses, grading scales, workflow steps, custom fields, report templates)
+- **AI Layer:** Provider-abstracted AI service (OpenAI/Anthropic/Google/Local) for chatbot, auto-grading, homework generation, and analytics
+
+### What Makes This Different
+
+| Traditional School Platform | EduTech |
+|---------------------------|---------|
+| Hardcoded enums for attendance statuses | **Configuration Engine** — each school defines its own statuses with weights, colors, i18n labels |
+| Hardcoded grading (percentage only) | **Rules Engine** — grade bands, GPA, rubric-based, all configurable per school |
+| Hardcoded workflows (Teacher→Principal) | **Workflow Engine** — configurable state machines with conditional transitions |
+| Hardcoded database columns for custom fields | **Metadata Engine** — JSONB + field definitions, zero schema changes |
+| No report card generation | **Template Engine** — Handlebars/PDF with per-school branding and dynamic data binding |
+| Vendor-locked AI integration | **AI Abstraction Layer** — swap OpenAI/Anthropic/Google/Local per task per tenant |
 
 ---
 
@@ -39,18 +45,22 @@ The existing Attendance Engagement system is a **Next.js monolith** with an embe
 5. **No client isolation** — all data in one schema without tenant boundaries
 6. **Limited extensibility** — adding a new client requires forking the entire codebase
 
-### Target State (Decoupled Multi-Tenant)
+### Target State (Engine-Driven SaaS)
 
-| Dimension | Current (Monolith) | Target (Decoupled) |
-|-----------|-------------------|-------------------|
-| **Architecture** | Next.js monolith + Python AI | Separate Backend API + Per-client Frontend |
-| **Multi-tenancy** | None (single school) | Full tenant isolation with `tenant_id` |
-| **Frontend** | One codebase, one look | Per-client customizable (branding, features, workflows) |
-| **Backend** | Embedded in Next.js | Standalone Node.js API (Express/NestJS) |
-| **Configuration** | Hardcoded | Database-driven, per-tenant |
-| **Auth** | SuperTokens + JWT cookie | SuperTokens (centralized) + JWT access tokens |
-| **Deployment** | Single Docker Compose | Independent backend cluster + per-client frontend deployments |
-| **AI Service** | FastAPI microservice | Same FastAPI + LangGraph, now tenant-aware |
+| Dimension | Current (Monolith) | Target (Engine-Driven) |
+|-----------|-------------------|----------------------|
+| **Architecture** | Next.js monolith + Python AI | Backend API + Engine Layer + Per-client Frontend |
+| **Multi-tenancy** | None (single school) | Hybrid: Shared Schema (90%) → Dedicated DB (10%) |
+| **Frontend** | One codebase, one look | Dynamic config-driven UI adapting to per-school statuses, grading, workflows |
+| **Backend** | Embedded in Next.js | NestJS with 8 bounded contexts communicating via Event Bus |
+| **Configuration** | Hardcoded | **Hierarchical Configuration Engine** with JSON Schema validation, inheritance, versioning |
+| **Business Rules** | Hardcoded if/else in services | **Rules Engine** with JSON condition/action evaluation per tenant |
+| **Workflows** | Hardcoded approval chains | **Workflow Engine** with configurable state machines |
+| **Custom Fields** | Requires schema migration | **Metadata Engine** — JSONB + GIN indexes, zero migrations |
+| **Documents** | None | **Template Engine** — Handlebars/PDF report cards, certificates |
+| **AI** | Hardcoded LangChain | **AI Abstraction Layer** — multi-provider, per-task per-tenant |
+| **Auth** | SuperTokens + JWT cookie | SuperTokens (identity) + JWT (session) with RBAC |
+| **Deployment** | Single Docker Compose | Backend cluster + per-client frontend + engine services |
 
 ---
 
@@ -94,16 +104,18 @@ EduTech is a **SaaS platform for school operations**. It provides:
 
 ### Module 1: Attendance Management
 
+> **Engine-driven.** Zero hardcoded statuses. Schools define their own via Configuration Engine.
+
 | ID | Requirement | Priority | Phase |
 |----|------------|----------|-------|
 | AT-01 | Teacher takes manual attendance (mobile-first roll-call grid) | P0 | 1 |
-| AT-02 | All students marked PRESENT by default; teacher marks absentees only | P0 | 1 |
-| AT-03 | Support attendance statuses: PRESENT, ABSENT_UNEXCUSED, ABSENT_EXCUSED, TARDY, MEDICAL_LEAVE, APPROVED_LEAVE, HALF_DAY | P0 | 1 |
-| AT-04 | Per-grade configurable: Daily (homeroom) vs Subject-wise attendance | P0 | 1 |
-| AT-05 | Attendance correction workflow (Request → Approve/Reject) | P0 | 1 |
-| AT-06 | Offline attendance with auto-sync | P1 | 2 |
-| AT-07 | Biometric/QR-based attendance for staff | P2 | 3 |
-| AT-08 | Period-wise attendance (multiple periods per day) | P1 | 2 |
+| AT-02 | **Configurable default status** — School A defaults to PRESENT; School B defaults to "Unmarked" | P0 | 1 |
+| AT-03 | **Tenant-defined attendance statuses** via Configuration Engine — School A: Present/Absent/Late; School B: +Half Day/Medical Leave; School C: period-based with custom statuses. Each status has: code, label (i18n), color, icon, weight, is_present flag, is_default flag | P0 | 0 |
+| AT-04 | Per-grade configurable: Daily (homeroom), Subject-wise, Period-wise, or Custom mode via Configuration Engine | P0 | 0 |
+| AT-05 | **Configurable correction workflow** via Workflow Engine — School A: self-correct within 24h then Teacher→Principal; School B: Teacher→Coordinator→Principal always | P0 | 0 |
+| AT-06 | Attendance calculation via **Rules Engine** — School A: present/total × 100; School B: SUM(weight)/total × 100 (Late=0.5, Medical=0.75) | P0 | 0 |
+| AT-07 | Offline attendance with auto-sync | P1 | 2 |
+| AT-08 | Biometric/QR-based attendance for staff | P2 | 3 |
 
 ### Module 2: Homework Management
 
@@ -121,26 +133,31 @@ EduTech is a **SaaS platform for school operations**. It provides:
 | HW-10 | Bulk evaluation (batch review multiple submissions) | P0 | 1 |
 | HW-11 | Teacher analytics dashboard (submission trends, weak students, class performance) | P1 | 2 |
 
-### Module 3: Exam Management
+### Module 3: Exam & Grading Management
+
+> **Engine-driven.** Zero hardcoded grading. Schools define their own via Configuration + Rules Engine.
 
 | ID | Requirement | Priority | Phase |
 |----|------------|----------|-------|
-| EX-01 | Create exams: unit test, mid-term, final, quiz, annual | P0 | 1 |
-| EX-02 | Score entry: per-student, bulk save, absent toggle | P0 | 1 |
-| EX-03 | Pass/fail tracking with configurable pass score | P0 | 1 |
-| EX-04 | Class statistics: average, highest, lowest, pass/fail rates, grade distribution | P0 | 1 |
-| EX-05 | Student exam results view (student + parent portals) | P0 | 1 |
-| EX-06 | Rubric-based grading for exams | P0 | 1 |
+| EX-01 | Create exams with **tenant-defined types** (stored as reference data, not enums) | P0 | 1 |
+| EX-02 | Score entry: per-student, bulk save, absent toggle — **supports any score type** (numeric, letter grade, GPA, rubric) | P0 | 1 |
+| EX-03 | **Configurable grading scale** via Configuration Engine — School A: A+ to F bands; School B: raw percentage; School C: GPA 4.0 scale; School D: rubric criteria. Each grade band has: label, min, max, grade_point, color | P0 | 0 |
+| EX-04 | **Grade calculation via Rules Engine** — School A: score→grade_band lookup; School B: score/max×100; School C: SUM(grade_point×credit_hours)/SUM(credit_hours) | P0 | 0 |
+| EX-05 | Class statistics with **tenant-specific aggregation** (average/median/mode/weighted, configurable) | P0 | 1 |
+| EX-06 | Student exam results view (student + parent portals) — **display adapts to grading type** (grade badge, percentage bar, GPA number) | P0 | 1 |
+| EX-07 | **Configurable promotion eligibility** via Rules Engine — thresholds, failed subject limits, conditional promotion rules | P0 | 0 |
 
 ### Module 4: Leave Management
 
+> **Engine-driven.** Configurable approval chains via Workflow Engine.
+
 | ID | Requirement | Priority | Phase |
 |----|------------|----------|-------|
-| LV-01 | Parent applies for student leave (type, dates, reason) | P0 | 1 |
-| LV-02 | Multi-level approval: Teacher → Principal workflow | P0 | 1 |
-| LV-03 | Staff leave application workflow | P0 | 1 |
-| LV-04 | Leave status tracking (pending, approved, rejected, cancelled) | P0 | 1 |
-| LV-05 | Leave history and reporting | P1 | 2 |
+| LV-01 | Parent applies for student leave with **tenant-defined leave types** (stored as reference data, not enums) | P0 | 1 |
+| LV-02 | **Configurable approval workflow** via Workflow Engine — School A: Teacher→Principal (2-step); School B: Teacher→Coordinator→Principal (3-step); School C: ≤3 days Teacher only, >3 days Teacher→Principal (conditional) | P0 | 0 |
+| LV-03 | Staff leave with **separately configurable workflow** | P0 | 1 |
+| LV-04 | Leave status tracking via Workflow Engine — states are tenant-defined, not hardcoded | P0 | 1 |
+| LV-05 | Leave history, balance tracking, and reporting | P1 | 2 |
 
 ### Module 5: Notifications
 
@@ -345,63 +362,69 @@ A **Tenant** represents a single school/client. Each tenant gets:
 
 ---
 
-## 1.9 Phased Rollout Plan
+## 1.9 Phased Rollout Plan (Engine-First)
 
-### Phase 1 — Foundation (Weeks 1–6)
+### Phase 0 — Engine Foundation (Weeks 1-4) ⭐ CRITICAL
 
-**Goal:** Standalone backend API + Single client frontend (migrate existing functionality)
-
-| Deliverable | Description |
-|-------------|-------------|
-| Backend API scaffold | Express/NestJS with TypeScript, modular domain structure |
-| Database schema migration | Prisma schema with `tenant_id` on all tables |
-| Auth system | SuperTokens integration + JWT access/refresh tokens |
-| RBAC engine | Permission-based authorization with role-permission mapping |
-| Tenant infrastructure | Tenant model, context middleware, query filtering |
-| Attendance module | Full CRUD + correction workflow |
-| Homework module | Full CRUD + submission + grading |
-| Frontend scaffold | Next.js 14 client with Tailwind + shadcn/ui |
-| API client generation | OpenAPI → TypeScript SDK |
-| Migrate existing data | Seed script for demo data, tenant import tool |
-
-### Phase 2 — Multi-Tenant & Scale (Weeks 7–12)
-
-**Goal:** Multiple tenants, configuration system, second client frontend
+**Goal:** Build the engine layer FIRST — before any business modules.
 
 | Deliverable | Description |
 |-------------|-------------|
-| Configuration engine | Per-tenant config service with database storage |
-| Feature flags | Per-tenant feature enable/disable |
-| Branding system | Per-tenant logo, colors, school name |
-| Second client deployment | Demonstrate per-client customization |
-| Admin dashboard | Super Admin tenant management UI |
-| Performance optimization | Query optimization, caching, connection pooling |
-| Rate limiting | Per-tenant and per-endpoint rate limits |
+| **Reference Data Tables** | Replace ALL Prisma enums (AttendanceStatus, ExamType, NotificationType, LeaveType) with tenant-configurable reference data tables |
+| **Configuration Engine** | Hierarchical JSON Schema config. Attendance statuses, grading scales, academic calendars — all tenant-defined |
+| **Rules Engine** | JSON condition/action evaluation for grade calculation, attendance aggregation, promotion eligibility |
+| **Workflow Engine** | Configurable state machines for leave approvals, corrections, admissions |
+| **Event Bus** | In-process typed event bus for inter-context communication (Redis Pub/Sub later) |
+| **Academic Calendar Tables** | AcademicYear + AcademicTerm models (semester/trimester/quarterly) |
+| **Metadata Columns** | JSONB `metadata` on Student, Staff, Homework, Exam tables |
+| **Configuration Admin UI** | Form generated from JSON Schema — admins define statuses, grading scales, calendars without code |
 
-### Phase 3 — Advanced Features (Weeks 13–18)
+### Phase 1 — Business Modules (Weeks 5-12)
 
-**Goal:** AI enhancements, notifications, reporting, offline support
+**Goal:** Build modules ON TOP of the engine layer. Zero hardcoded business rules.
 
 | Deliverable | Description |
 |-------------|-------------|
-| Notification service | Multi-channel (Push, SMS, Email, WhatsApp, Telegram) |
-| Advanced reporting | Custom report builder, scheduled reports |
-| AI homework features | OCR extraction, image quality check, bulk AI grading |
+| Auth + RBAC | SuperTokens + JWT + permission-based RBAC |
+| Academic Structure | Tenants, grades, sections, subjects, classes, students, teachers |
+| **Attendance (config-driven)** | Dynamic statuses from ConfigEngine, RulesEngine calculation, WorkflowEngine corrections |
+| **Homework (config-driven)** | RulesEngine grading, AI generation, submission workflow |
+| **Exam (config-driven)** | Config-driven types + RulesEngine grading + RulesEngine promotion |
+| **Leave (workflow-driven)** | WorkflowEngine approvals — School A: 2-step, School B: 3-step, School C: conditional |
+| **Notifications (event-driven)** | Listen to domain events → send alerts. Tenant-configurable notification types |
+| Seed data | 3 diverse school configs (grade bands, percentage, GPA) |
+| **Frontend (config-driven UI)** | Dynamic status toggles, grade displays, workflow steps — all rendered from tenant config |
+
+### Phase 2 — Advanced Engines + Scale (Weeks 13-18)
+
+| Deliverable | Description |
+|-------------|-------------|
+| **Metadata Engine** | Custom fields (JSONB + field definitions), dynamic forms, zero schema changes |
+| **Template Engine** | Handlebars/PDF report cards, certificates, letters with per-school branding |
+| **Workflow Designer UI** | Visual state machine editor |
+| **Rules Admin UI** | Rule editor with live tester |
+| Hybrid multi-tenant routing | Tier 1 (shared schema) → Tier 2 (separate schema) → Tier 3 (dedicated DB) |
+| Performance optimization | Redis caching, connection pooling, query optimization |
+
+### Phase 3 — AI + Advanced (Weeks 19-24)
+
+| Deliverable | Description |
+|-------------|-------------|
+| **AI abstraction layer** | Multi-provider (OpenAI, Anthropic, Google, local). Configurable AI tasks per tenant |
+| Multi-channel notifications | Push, SMS, Email, WhatsApp, Telegram |
+| Advanced reporting | Custom report builder, analytics dashboards |
 | Offline support | PWA with IndexedDB queue |
-| Analytics dashboard | Teacher/principal analytics |
-| Multi-language | i18n framework with English, Hindi, Marathi |
+| Multi-language | i18n framework (English, Hindi, Marathi) |
 
-### Phase 4 — Enterprise (Weeks 19–24)
-
-**Goal:** Compliance, monitoring, observability, marketplace
+### Phase 4 — Enterprise (Weeks 25-30)
 
 | Deliverable | Description |
 |-------------|-------------|
-| Audit & compliance | Full audit trail, compliance reports, data export |
-| Monitoring | Prometheus metrics, Grafana dashboards, Sentry error tracking |
-| CI/CD | Automated testing, deployment pipelines per client |
-| Documentation | API docs, integration guides, client onboarding guide |
-| Client SDK | JavaScript/Python SDK for third-party integrations |
+| Tier 3/4 deployments | Dedicated DB + dedicated instance for enterprise tenants |
+| Audit & compliance | Full audit UI, compliance reports, data export/deletion |
+| Monitoring | Prometheus + Grafana + Sentry |
+| CI/CD | Automated pipelines per client |
+| Documentation + SDK | API docs, integration guides, client SDK |
 
 ---
 
@@ -430,6 +453,9 @@ A **Tenant** represents a single school/client. Each tenant gets:
 | Frontend customization scope creep | High | Medium | Strict API contract, feature flag boundaries |
 | AI service latency | Medium | Medium | Async processing, caching, fallback responses |
 | Teacher resistance to change | High | Medium | UX research, teacher-friendly design, training videos |
+| **Engine complexity delays Phase 1** | Medium | High | Build minimum viable engine first. Add advanced features in Phase 2. Thorough documentation |
+| **Configuration sprawl** | Medium | Medium | Configuration templates for common school types. Inheritance to reduce duplication |
+| **Event bus reliability** | Low | High | Start with in-process event bus. Add persistence (Redis Streams) before production |
 
 ---
 

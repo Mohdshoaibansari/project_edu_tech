@@ -31,22 +31,38 @@
 │                                                                            │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────────────┐ │
 │  │ API Gateway  │  │ Auth        │  │ Business    │  │ Multi-Tenant     │ │
-│  │ (Nginx/Envoy)│──│ Middleware  │──│ Logic       │──│ Middleware       │ │
-│  │ Rate Limiting│  │ JWT Verify  │  │ (Domain     │  │ Tenant Context   │ │
-│  │ Load Balance │  │ RBAC Guard  │  │  Modules)   │  │ Scope Filtering  │ │
-│  └─────────────┘  └─────────────┘  └──────┬──────┘  └──────────────────┘ │
-│                                           │                                │
-│                          ┌────────────────▼────────────────────┐          │
-│                          │        Data Layer                    │          │
-│                          │  ┌────────────┐  ┌───────────────┐  │          │
-│                          │  │ Prisma ORM │  │ File Storage  │  │          │
-│                          │  │ PostgreSQL │  │ S3 / MinIO    │  │          │
-│                          │  └────────────┘  └───────────────┘  │          │
-│                          │  ┌────────────┐  ┌───────────────┐  │          │
-│                          │  │ Redis      │  │ Message Queue │  │          │
-│                          │  │ (Cache)    │  │ (BullMQ/Rab)  │  │          │
-│                          │  └────────────┘  └───────────────┘  │          │
-│                          └─────────────────────────────────────┘          │
+│  │ (Nginx/Envoy)│──│ Middleware  │──│ Contexts    │──│ Middleware       │ │
+│  │ Rate Limiting│  │ JWT Verify  │  │ (Identity,  │  │ Tenant Context   │ │
+│  │ Load Balance │  │ RBAC Guard  │  │  Academic,  │  │ Scope Filtering  │ │
+│  └─────────────┘  └─────────────┘  │  Attendance,│  └──────────────────┘ │
+│                                    │  Assessment,│                       │
+│  ┌─────────────────────────────────│  Leave,     │──────────────────┐  │
+│  │         ENGINE LAYER            │  Communic.) │                  │  │
+│  │  ┌──────────┐ ┌──────────┐     └──────┬──────┘                  │  │
+│  │  │ Config   │ │ Rules    │            │                          │  │
+│  │  │ Engine   │ │ Engine   │     ┌──────▼──────┐                  │  │
+│  │  └──────────┘ └──────────┘     │ EVENT BUS   │                  │  │
+│  │  ┌──────────┐ ┌──────────┐     │ (Pub/Sub)   │                  │  │
+│  │  │ Workflow │ │ Metadata │     └──────┬──────┘                  │  │
+│  │  │ Engine   │ │ Engine   │            │                          │  │
+│  │  └──────────┘ └──────────┘            │                          │  │
+│  │  ┌──────────┐                         │                          │  │
+│  │  │ Template │                         │                          │  │
+│  │  │ Engine   │                         │                          │  │
+│  │  └──────────┘                         │                          │  │
+│  └───────────────────────────────────────┼──────────────────────────┘  │
+│                                           │                             │
+│                          ┌────────────────▼────────────────────┐       │
+│                          │        Data Layer                    │       │
+│                          │  ┌────────────┐  ┌───────────────┐  │       │
+│                          │  │ Prisma ORM │  │ File Storage  │  │       │
+│                          │  │ PostgreSQL │  │ S3 / MinIO    │  │       │
+│                          │  └────────────┘  └───────────────┘  │       │
+│                          │  ┌────────────┐  ┌───────────────┐  │       │
+│                          │  │ Redis      │  │ Message Queue │  │       │
+│                          │  │ (Cache)    │  │ (BullMQ/Rab)  │  │       │
+│                          │  └────────────┘  └───────────────┘  │       │
+│                          └─────────────────────────────────────┘       │
 └───────────────────────────────────────────────────────────────────────────┘
             │
             │  Internal API (x-api-key auth)
@@ -234,50 +250,59 @@
 
 ## 3.5 Domain Module Structure
 
-### Backend (`server/`)
+### Backend (`server/`) — Bounded Contexts + Engine Layer
 
 ```
 server/
 ├── src/
-│   ├── modules/                  # Domain-oriented business modules
-│   │   ├── attendance/
-│   │   │   ├── attendance.controller.ts
-│   │   │   ├── attendance.service.ts
-│   │   │   ├── attendance.repository.ts
-│   │   │   ├── dto/
-│   │   │   │   ├── create-attendance.dto.ts
-│   │   │   │   ├── update-attendance.dto.ts
-│   │   │   │   └── attendance-response.dto.ts
-│   │   │   ├── validation/
-│   │   │   │   └── attendance.schema.ts      # Zod schemas
-│   │   │   ├── permissions/
-│   │   │   │   └── attendance.permissions.ts  # Module permissions
-│   │   │   └── tests/
-│   │   │       ├── attendance.service.spec.ts
-│   │   │       └── attendance.controller.spec.ts
+│   ├── contexts/                        # Bounded contexts (DDD)
+│   │   ├── identity/                    # Users, roles, auth, sessions
+│   │   │   ├── domain/
+│   │   │   ├── application/
+│   │   │   ├── infrastructure/
+│   │   │   └── interfaces/
+│   │   ├── academic-structure/          # Tenants, grades, sections, subjects, classes, calendar
+│   │   ├── attendance/                  # Attendance CRUD, status validation, rate calculation
+│   │   ├── assessment/                  # Homework, exams, grading, rubrics, submissions
+│   │   ├── leave/                       # Leave requests, workflow integration
+│   │   ├── communication/               # Notifications, chatbot, messaging
 │   │   │
-│   │   ├── homework/
-│   │   ├── exams/
-│   │   ├── leave/
-│   │   ├── notifications/
-│   │   ├── reports/
-│   │   ├── users/
-│   │   ├── tenants/
-│   │   └── auth/
+│   │   ├── configuration/               # ⭐ ENGINE LAYER (Cross-cutting)
+│   │   │   ├── config-engine/           # Hierarchical JSON Schema configuration
+│   │   │   ├── rules-engine/            # JSON condition/action evaluation
+│   │   │   ├── workflow-engine/         # Configurable state machines
+│   │   │   ├── metadata-engine/         # Custom fields without schema changes
+│   │   │   └── template-engine/         # Document generation (Handlebars + PDF)
+│   │   │
+│   │   └── reporting/                   # Reports, analytics, dashboards, exports
 │   │
-│   ├── shared/                    # Cross-cutting concerns
-│   │   ├── auth/                  # Auth guards, JWT utils
-│   │   ├── tenant/                # Tenant context, config
-│   │   ├── permissions/           # RBAC engine
-│   │   ├── database/              # Prisma client, transaction helper
-│   │   ├── storage/               # File storage abstraction
-│   │   ├── notifications/         # Notification service abstraction
-│   │   ├── audit/                 # Audit logging
-│   │   ├── cache/                 # Redis caching
-│   │   ├── queue/                 # BullMQ job queue
-│   │   └── errors/                # Error handling, exception filters
+│   ├── shared-kernel/                    # Branded types, errors, event bus, DB client
+│   │   ├── types/                        # TenantId, UserId, StudentId branded types
+│   │   ├── errors/                       # NotFoundError, ForbiddenError, ValidationError
+│   │   ├── events/                       # Domain event definitions + EventBus
+│   │   └── database/                     # Prisma client, transaction helper
 │   │
-│   ├── config/                    # Environment & app configuration
+│   ├── providers/                       # External integrations
+│   │   ├── auth/                        # SuperTokens adapter
+│   │   ├── ai/                          # AI provider abstraction + implementations
+│   │   ├── notifications/               # Email, SMS, Push providers
+│   │   └── storage/                     # S3/MinIO file storage
+│   │
+│   └── main.ts                          # Application entry point
+│
+├── prisma/
+│   ├── schema.prisma                    # Zero business enums — reference data tables instead
+│   ├── migrations/
+│   └── seed.ts                          # 3 diverse school configs
+│
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── config-variability/              # ⭐ Tests with 3+ school configs
+│
+├── package.json
+└── tsconfig.json
+```
 │   └── main.ts                    # Application entry point
 │
 ├── prisma/

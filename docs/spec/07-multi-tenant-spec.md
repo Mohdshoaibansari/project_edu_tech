@@ -7,16 +7,16 @@
 
 ## 7.1 Multi-Tenant Strategy
 
-### Chosen Model: Shared Database, Shared Schema
+### Chosen Model: Hybrid Multi-Tenant (4-Tier)
 
-| Strategy | Pros | Cons |
-|----------|------|------|
-| **Shared DB, Shared Schema** ✅ | Simple, cost-effective, easy cross-tenant queries | Requires strict `tenant_id` discipline |
-| Shared DB, Separate Schema | Better isolation | Complex migrations, harder cross-tenant |
-| Separate Database | Full isolation | Costly, harder to manage |
-| Separate Instance | Maximum isolation | Very expensive, complex orchestration |
+| Tier | Strategy | % of Tenants | When to Use |
+|------|----------|-------------|-------------|
+| **Tier 1** | Shared DB, Shared Schema | 90% | < 2,000 students, standard features |
+| **Tier 2** | Shared DB, Separate Schema | 5% | Needs custom database tables |
+| **Tier 3** | Dedicated Database | 3% | Enterprise, data residency requirements |
+| **Tier 4** | Dedicated Instance | 2% | 10,000+ students, government contracts |
 
-**Default choice:** Shared database with `tenant_id` column on every table + PostgreSQL Row-Level Security as defense-in-depth.
+> **Full details:** See [`17-multi-tenant-strategy.md`](./17-multi-tenant-strategy.md) for connection pooling, routing, migration strategies, tenant onboarding, and tier decision matrix.
 
 ---
 
