@@ -1,0 +1,151 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Reporting Context API
+  description: |
+    Reports, dashboards, and data export.
+    **Phase 1 implementation.** Scaffolded in Phase 0.
+  version: "0.1.0"
+servers:
+  - url: /api/v1
+    description: EduTech Backend API
+tags:
+  - name: Reports
+  - name: Export
+
+paths:
+  /{tenantId}/reports/attendance:
+    get:
+      tags: [Reports]
+      summary: Attendance report — configurable date range, aggregation
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: class_id
+          in: query
+          schema: { type: string }
+        - name: student_id
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: format
+          in: query
+          schema: { type: string, enum: [summary, detailed] }
+      responses: { "200": { description: Attendance report data } }
+
+  /{tenantId}/reports/exams:
+    get:
+      tags: [Reports]
+      summary: Exam results report
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: exam_id
+          in: query
+          schema: { type: string }
+        - name: class_id
+          in: query
+          schema: { type: string }
+        - name: academic_term_id
+          in: query
+          schema: { type: string }
+        - name: student_id
+          in: query
+          schema: { type: string }
+      responses: { "200": { description: Exam results with grades } }
+
+  /{tenantId}/reports/leaves:
+    get:
+      tags: [Reports]
+      summary: Leave summary report
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: student_id
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses: { "200": { description: Leave summary } }
+
+  /{tenantId}/reports/dashboard:
+    get:
+      tags: [Reports]
+      summary: Dashboard summary for role
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Role-aware dashboard data (different for teacher, principal, parent)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      attendance_overview: { type: object }
+                      upcoming_exams: { type: array, items: { type: object } }
+                      pending_homework: { type: array, items: { type: object } }
+                      leave_requests: { type: array, items: { type: object } }
+                      notifications_count: { type: integer }
+
+  /{tenantId}/export/attendance:
+    get:
+      tags: [Export]
+      summary: Export attendance as CSV/Excel/PDF
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: class_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, xlsx, pdf], default: csv }
+      responses: { "200": { description: Exported file } }
+
+  /{tenantId}/export/exam-results/{examId}:
+    get:
+      tags: [Export]
+      summary: Export exam results
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: examId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, xlsx, pdf], default: csv }
+      responses: { "200": { description: Exported file } }

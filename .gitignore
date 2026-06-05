@@ -66,11 +66,14 @@ storage/
 # Logs
 logs/
 *.log
+test-results.log
+test-responses.log
 
 # Temporary
 tmp/
 temp/
 .tmp/
+.test-tmp-resp.txt
 
 # PI agent
 .pi/

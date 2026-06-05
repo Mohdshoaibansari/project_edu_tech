@@ -1,0 +1,197 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Identity Context API
+  description: |
+    Authentication, user management, RBAC permissions.
+    **Phase 1 implementation.** Scaffolded in Phase 0 for contract-first development.
+  version: "0.1.0"
+servers:
+  - url: /api/v1
+    description: EduTech Backend API
+tags:
+  - name: Auth
+    description: Login, logout, token refresh
+  - name: Users
+    description: User CRUD
+  - name: Roles & Permissions
+    description: RBAC management
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login — exchange SuperTokens identity for JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, supertokens_id]
+              properties:
+                email: { type: string, format: email }
+                supertokens_id: { type: string }
+      responses:
+        "200":
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      access_token: { type: string }
+                      refresh_token: { type: string }
+                      user:
+                        $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token (uses HttpOnly cookie)
+      responses:
+        "200":
+          description: New token pair
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout — invalidate refresh token
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile from JWT
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserProfile"
+
+  /{tenantId}/users:
+    get:
+      tags: [Users]
+      summary: List users (tenant-scoped, paginated)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { type: string, enum: [SUPER_ADMIN, ADMIN, PRINCIPAL, TEACHER, PARENT, STUDENT, STAFF, COUNSELOR] }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Paginated user list
+
+  /{tenantId}/users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: User details
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /{tenantId}/permissions:
+    get:
+      tags: [Roles & Permissions]
+      summary: List all permissions
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Permission list
+
+  /{tenantId}/roles/{role}/permissions:
+    get:
+      tags: [Roles & Permissions]
+      summary: Get permissions for a role
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: role
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [SUPER_ADMIN, ADMIN, PRINCIPAL, TEACHER, PARENT, STUDENT, STAFF, COUNSELOR]
+      responses:
+        "200":
+          description: Role permissions
+
+components:
+  schemas:
+    UserProfile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        first_name: { type: string }
+        last_name: { type: string }
+        role: { type: string }
+        tenant_id: { type: string }
+        permissions: { type: array, items: { type: string } }
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    Unauthorized:
+      description: Authentication required or failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Invalid or expired token"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

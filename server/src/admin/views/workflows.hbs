@@ -1,0 +1,80 @@
+<h1 class="text-2xl font-bold mb-6">{{title}}</h1>
+<p class="text-gray-600 mb-6">View state machine definitions for all workflows (approval chains, corrections, admissions).</p>
+
+{{#each workflows}}
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+  <div class="flex justify-between items-start mb-4">
+    <div>
+      <h2 class="text-lg font-bold">{{name}}</h2>
+      <span class="text-sm text-gray-500">Code: <code class="bg-gray-100 px-1 rounded">{{code}}</code></span>
+      {{#if description}}<p class="text-sm text-gray-600 mt-1">{{description}}</p>{{/if}}
+    </div>
+    <span class="text-xs text-gray-400">v{{version}}</span>
+  </div>
+
+  <!-- States -->
+  <div class="mb-4">
+    <h3 class="text-sm font-semibold text-gray-500 mb-2">States ({{states.length}})</h3>
+    <div class="flex flex-wrap gap-2">
+      {{#each states}}
+      <div class="workflow-node {{#if is_initial}}initial{{/if}} {{#if is_final}}final{{/if}}">
+        <div class="font-semibold text-sm">{{name}}</div>
+        <div class="text-xs text-gray-400">{{code}}</div>
+        {{#if is_initial}}<span class="text-xs text-blue-500">INITIAL</span>{{/if}}
+        {{#if is_final}}<span class="text-xs text-green-500">FINAL</span>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </div>
+
+  <!-- Transitions -->
+  <div>
+    <h3 class="text-sm font-semibold text-gray-500 mb-2">Transitions ({{transitions.length}})</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b text-left text-gray-500">
+            <th class="py-1 px-2">From</th>
+            <th class="py-1 px-2 text-center">→</th>
+            <th class="py-1 px-2">To</th>
+            <th class="py-1 px-2">Transition Name</th>
+            <th class="py-1 px-2">Actors</th>
+            <th class="py-1 px-2">Condition</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each transitions}}
+          <tr class="border-b hover:bg-gray-50">
+            <td class="py-1 px-2">{{from_state.name}}</td>
+            <td class="py-1 px-2 text-center text-gray-300">→</td>
+            <td class="py-1 px-2">{{to_state.name}}</td>
+            <td class="py-1 px-2 font-medium">{{name}}</td>
+            <td class="py-1 px-2">
+              {{#if actor_roles}}
+              {{#each actor_roles}}<span class="status-badge bg-blue-100 text-blue-800 mr-1">{{this}}</span>{{/each}}
+              {{else}}
+              <span class="text-gray-400">Any</span>
+              {{/if}}
+            </td>
+            <td class="py-1 px-2">
+              {{#if conditionsJson}}
+              <code class="text-xs bg-gray-100 px-1 rounded">{{conditionsJson}}</code>
+              {{else}}
+              <span class="text-gray-400">—</span>
+              {{/if}}
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{{/each}}
+
+{{#unless workflows.length}}
+<div class="bg-white shadow rounded-lg p-12 text-center text-gray-400">
+  <p class="text-lg">No workflows defined</p>
+  <p class="text-sm mt-2">Workflows are created via seed data or the Workflow API.</p>
+</div>
+{{/unless}}

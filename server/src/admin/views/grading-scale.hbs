@@ -1,0 +1,115 @@
+<h1 class="text-2xl font-bold mb-6">{{title}}</h1>
+<p class="text-gray-600 mb-6">Configure how scores are converted to grades — grade bands, percentage, GPA, or rubric-based.</p>
+
+<!-- Current Scale Display -->
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+  <h2 class="text-lg font-semibold mb-4">Current Grading Scale</h2>
+  {{#if scale}}
+  <div class="bg-gray-50 rounded p-4">
+    <div class="mb-2"><span class="font-medium">Type:</span> 
+      <span class="status-badge bg-blue-100 text-blue-800">{{scale.type}}</span>
+    </div>
+
+    {{#if isGradeBands}}
+    <table class="w-full mt-3 text-sm">
+      <thead>
+        <tr class="border-b text-left text-gray-500">
+          <th class="py-1 px-2">Label</th>
+          <th class="py-1 px-2">Min</th>
+          <th class="py-1 px-2">Max</th>
+          <th class="py-1 px-2">Grade Point</th>
+          <th class="py-1 px-2">Color</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each scale.bands}}
+        <tr class="border-b">
+          <td class="py-1 px-2 font-semibold">{{label}}</td>
+          <td class="py-1 px-2">{{min}}</td>
+          <td class="py-1 px-2">{{max}}</td>
+          <td class="py-1 px-2">{{grade_point}}</td>
+          <td class="py-1 px-2"><span class="inline-block w-4 h-4 rounded" style="background:{{color}}"></span></td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{/if}}
+
+    {{#if isPercentage}}
+    <div class="text-sm">
+      <p>Pass: {{scale.pass_percentage}}%</p>
+      <p>Distinction: {{scale.distinction_percentage}}%</p>
+    </div>
+    {{/if}}
+
+    {{#if isGpa}}
+    <div class="text-sm">
+      <p>Scale: {{scale.scale}}</p>
+      {{#if scale.bands}}
+      <table class="w-full mt-3 text-sm">
+        <thead><tr class="border-b text-left"><th class="py-1 px-2">Label</th><th class="py-1 px-2">GPA Range</th></tr></thead>
+        <tbody>
+          {{#each scale.bands}}
+          <tr class="border-b"><td class="py-1 px-2 font-semibold">{{label}}</td><td class="py-1 px-2">{{min_gpa}} - {{max_gpa}}</td></tr>
+          {{/each}}
+        </tbody>
+      </table>
+      {{/if}}
+    </div>
+    {{/if}}
+  </div>
+  {{else}}
+  <div class="text-gray-400 text-center py-6">No grading scale configured. Use the editor below.</div>
+  {{/if}}
+</div>
+
+<!-- JSON Editor -->
+<div class="bg-white shadow rounded-lg p-6">
+  <h2 class="text-lg font-semibold mb-4">Edit Grading Scale (JSON)</h2>
+  <p class="text-sm text-gray-500 mb-3">Enter the JSON configuration directly. Supports: grade_bands, percentage, gpa, rubric.</p>
+
+  <form method="POST">
+    <textarea name="config_json" rows="18" class="border rounded p-3 w-full font-mono text-sm"
+      placeholder='{"type":"grade_bands","bands":[{"label":"A+","min":90,"max":100,"grade_point":4.0,"color":"#10B981"}]}'
+    >{{#if configJson}}{{configJson}}{{else}}{{scaleJson}}{{/if}}</textarea>
+
+    <details class="mt-4 text-sm text-gray-500">
+      <summary class="cursor-pointer hover:text-gray-700">View examples</summary>
+      <div class="mt-2 space-y-4">
+        <div>
+          <strong>Grade Bands:</strong>
+          <pre class="bg-gray-100 p-2 rounded text-xs mt-1">{
+  "type": "grade_bands",
+  "bands": [
+    {"label": "A+", "min": 90, "max": 100, "grade_point": 4.0, "color": "#10B981"},
+    {"label": "A",  "min": 80, "max": 89,  "grade_point": 3.6, "color": "#34D399"},
+    {"label": "F",  "min": 0,  "max": 32,  "grade_point": 0.0, "color": "#EF4444"}
+  ]
+}</pre>
+        </div>
+        <div>
+          <strong>Percentage:</strong>
+          <pre class="bg-gray-100 p-2 rounded text-xs mt-1">{
+  "type": "percentage",
+  "pass_percentage": 35,
+  "distinction_percentage": 75
+}</pre>
+        </div>
+        <div>
+          <strong>GPA:</strong>
+          <pre class="bg-gray-100 p-2 rounded text-xs mt-1">{
+  "type": "gpa",
+  "scale": 4.0,
+  "bands": [
+    {"label": "A+", "min_gpa": 3.7, "max_gpa": 4.0, "color": "#10B981"}
+  ]
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <button type="submit" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 text-sm">
+      Save Grading Scale
+    </button>
+  </form>
+</div>

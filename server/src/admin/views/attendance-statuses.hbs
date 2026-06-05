@@ -1,0 +1,179 @@
+<h1 class="text-2xl font-bold mb-6">{{title}}</h1>
+<p class="text-gray-600 mb-6">Define attendance statuses with codes, labels (English + Hindi), colors, weights, and presence flags.</p>
+
+<div class="bg-white shadow rounded-lg p-6">
+  <h2 class="text-lg font-semibold mb-4">Current Statuses</h2>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b text-left text-gray-500">
+          <th class="py-2 px-3">Order</th>
+          <th class="py-2 px-3">Code</th>
+          <th class="py-2 px-3">Label (EN)</th>
+          <th class="py-2 px-3">Label (HI)</th>
+          <th class="py-2 px-3">Color</th>
+          <th class="py-2 px-3">Icon</th>
+          <th class="py-2 px-3">Weight</th>
+          <th class="py-2 px-3">Is Present</th>
+          <th class="py-2 px-3">Default</th>
+          <th class="py-2 px-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each statuses}}
+        <tr class="border-b hover:bg-gray-50">
+          <td class="py-2 px-3 font-mono">{{sort_order}}</td>
+          <td class="py-2 px-3 font-semibold">{{code}}</td>
+          <td class="py-2 px-3">{{label.en}}</td>
+          <td class="py-2 px-3 text-gray-500">{{label.hi}}</td>
+          <td class="py-2 px-3">
+            <span class="inline-block w-6 h-6 rounded" style="background:{{color}}"></span> {{color}}
+          </td>
+          <td class="py-2 px-3">{{icon}}</td>
+          <td class="py-2 px-3 font-mono">{{weight}}</td>
+          <td class="py-2 px-3">{{#if is_present}}✅{{else}}❌{{/if}}</td>
+          <td class="py-2 px-3">{{#if is_default}}⭐{{/if}}</td>
+          <td class="py-2 px-3">
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="id" value="{{id}}">
+              <button class="text-red-500 hover:underline text-xs">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {{/each}}
+        {{#unless statuses.length}}
+        <tr><td colspan="10" class="py-4 text-center text-gray-400">No statuses defined yet</td></tr>
+        {{/unless}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add New Status -->
+<div class="bg-white shadow rounded-lg p-6 mt-6">
+  <h2 class="text-lg font-semibold mb-4">Add / Edit Status</h2>
+  <form method="POST" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <input type="hidden" name="action" value="save">
+    <div>
+      <label class="block mb-1 font-medium">Code *</label>
+      <input type="text" name="code" required placeholder="PRESENT"
+             class="border rounded px-3 py-1.5 w-full" maxlength="30">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Label (English) *</label>
+      <input type="text" name="label_en" required placeholder="Present"
+             class="border rounded px-3 py-1.5 w-full">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Label (Hindi)</label>
+      <input type="text" name="label_hi" placeholder="उपस्थित"
+             class="border rounded px-3 py-1.5 w-full">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Color</label>
+      <input type="text" name="color" value="#10B981"
+             class="border rounded px-3 py-1.5 w-full">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Icon</label>
+      <input type="text" name="icon" placeholder="check-circle"
+             class="border rounded px-3 py-1.5 w-full">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Weight</label>
+      <input type="text" name="weight" value="1.0"
+             class="border rounded px-3 py-1.5 w-full" placeholder="1.0">
+      <span class="text-xs text-gray-400">1.0=full, 0.5=half, 0.0=absent</span>
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Sort Order</label>
+      <input type="number" name="sort_order" value="0"
+             class="border rounded px-3 py-1.5 w-full">
+    </div>
+    <div class="flex items-end gap-4 pb-1">
+      <label class="flex items-center gap-1 text-sm">
+        <input type="checkbox" name="is_present" value="true" checked> Is Present
+      </label>
+      <label class="flex items-center gap-1 text-sm">
+        <input type="checkbox" name="is_default" value="true"> Default
+      </label>
+    </div>
+    <div class="col-span-full">
+      <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 text-sm">
+        Save Status
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Quick Presets -->
+<div class="bg-white shadow rounded-lg p-6 mt-6">
+  <h2 class="text-lg font-semibold mb-4">Quick Add Presets</h2>
+  <div class="flex flex-wrap gap-2">
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="code" value="PRESENT">
+      <input type="hidden" name="label_en" value="Present">
+      <input type="hidden" name="label_hi" value="उपस्थित">
+      <input type="hidden" name="color" value="#10B981">
+      <input type="hidden" name="weight" value="1.0">
+      <input type="hidden" name="is_present" value="true">
+      <input type="hidden" name="sort_order" value="99">
+      <button class="border rounded px-3 py-1 text-xs hover:bg-gray-100">+ PRESENT</button>
+    </form>
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="code" value="ABSENT">
+      <input type="hidden" name="label_en" value="Absent">
+      <input type="hidden" name="label_hi" value="अनुपस्थित">
+      <input type="hidden" name="color" value="#EF4444">
+      <input type="hidden" name="weight" value="0.0">
+      <input type="hidden" name="is_present" value="false">
+      <input type="hidden" name="sort_order" value="99">
+      <button class="border rounded px-3 py-1 text-xs hover:bg-gray-100">+ ABSENT</button>
+    </form>
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="code" value="LATE">
+      <input type="hidden" name="label_en" value="Late">
+      <input type="hidden" name="label_hi" value="देर से">
+      <input type="hidden" name="color" value="#F59E0B">
+      <input type="hidden" name="weight" value="0.5">
+      <input type="hidden" name="is_present" value="true">
+      <input type="hidden" name="sort_order" value="99">
+      <button class="border rounded px-3 py-1 text-xs hover:bg-gray-100">+ LATE</button>
+    </form>
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="code" value="HALF_DAY">
+      <input type="hidden" name="label_en" value="Half Day">
+      <input type="hidden" name="color" value="#8B5CF6">
+      <input type="hidden" name="weight" value="0.5">
+      <input type="hidden" name="is_present" value="true">
+      <input type="hidden" name="sort_order" value="99">
+      <button class="border rounded px-3 py-1 text-xs hover:bg-gray-100">+ HALF_DAY</button>
+    </form>
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="code" value="MEDICAL">
+      <input type="hidden" name="label_en" value="Medical Leave">
+      <input type="hidden" name="color" value="#EC4899">
+      <input type="hidden" name="weight" value="1.0">
+      <input type="hidden" name="is_present" value="true">
+      <input type="hidden" name="sort_order" value="99">
+      <button class="border rounded px-3 py-1 text-xs hover:bg-gray-100">+ MEDICAL</button>
+    </form>
+    <form method="POST" style="display:inline">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="code" value="EXCUSED">
+      <input type="hidden" name="label_en" value="Excused">
+      <input type="hidden" name="color" value="#6EE7B7">
+      <input type="hidden" name="weight" value="1.0">
+      <input type="hidden" name="is_present" value="true">
+      <input type="hidden" name="sort_order" value="99">
+      <button class="border rounded px-3 py-1 text-xs hover:bg-gray-100">+ EXCUSED</button>
+    </form>
+  </div>
+</div>

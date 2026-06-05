@@ -1,0 +1,234 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Academic Structure Context API
+  description: |
+    Academic structure management — grades, sections, subjects, classes, academic calendars.
+    **Phase 1 implementation.** Scaffolded in Phase 0.
+  version: "0.1.0"
+servers:
+  - url: /api/v1
+    description: EduTech Backend API
+tags:
+  - name: Academic Years
+  - name: Grades & Sections
+  - name: Subjects
+  - name: Classes
+  - name: Students
+
+paths:
+  # Academic Years & Terms
+  /{tenantId}/academic-years:
+    get:
+      tags: [Academic Years]
+      summary: List academic years
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Academic year list
+    post:
+      tags: [Academic Years]
+      summary: Create academic year
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, start_date, end_date]
+              properties:
+                name: { type: string, example: "2026-2027" }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+      responses:
+        "201": { description: Created }
+
+  /{tenantId}/academic-years/{yearId}/terms:
+    get:
+      tags: [Academic Years]
+      summary: List terms within an academic year
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: yearId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Term list } }
+    post:
+      tags: [Academic Years]
+      summary: Create term (semester/trimester/quarter)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: yearId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, start_date, end_date, term_type]
+              properties:
+                code: { type: string, example: "SEM1" }
+                name: { type: string, example: "Semester 1" }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                term_type: { type: string, enum: [semester, trimester, quarter, custom] }
+      responses: { "201": { description: Created } }
+
+  # Grades & Sections
+  /{tenantId}/grades:
+    get:
+      tags: [Grades & Sections]
+      summary: List grades (K-12)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Grade list } }
+
+  /{tenantId}/grades/{gradeId}/sections:
+    get:
+      tags: [Grades & Sections]
+      summary: List sections for a grade
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: gradeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Section list } }
+
+  # Subjects
+  /{tenantId}/subjects:
+    get:
+      tags: [Subjects]
+      summary: List subjects
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Subject list } }
+
+  # Students
+  /{tenantId}/students:
+    get:
+      tags: [Students]
+      summary: List students (paginated, filterable)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: grade_level
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses: { "200": { description: Paginated student list } }
+    post:
+      tags: [Students]
+      summary: Enroll a new student
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, date_of_birth, grade_level]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                date_of_birth: { type: string, format: date }
+                grade_level: { type: string }
+                parent_id: { type: string }
+                metadata: { type: object }
+      responses: { "201": { description: Student created } }
+
+  /{tenantId}/students/{studentId}:
+    get:
+      tags: [Students]
+      summary: Get student by ID
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: studentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Student details } }
+
+  # Staff
+  /{tenantId}/staff:
+    get:
+      tags: [Students]
+      summary: List staff members
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: designation
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses: { "200": { description: Staff list } }
+    post:
+      tags: [Students]
+      summary: Add staff member
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, designation]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                designation: { type: string }
+                qualifications: { type: string }
+                metadata: { type: object }
+      responses: { "201": { description: Staff created } }

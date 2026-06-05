@@ -1,0 +1,63 @@
+<h1 class="text-2xl font-bold mb-6">{{title}}</h1>
+<p class="text-gray-600 mb-6">Load pre-built configuration templates for new tenants. Templates define attendance statuses, grading scales, and workflows for common school types (CBSE, ICSE, International).</p>
+
+<div class="bg-white shadow rounded-lg p-6">
+  <h2 class="text-lg font-semibold mb-4">Available Templates</h2>
+
+  <div class="space-y-4">
+    {{#each templates}}
+    <div class="border rounded-lg p-4 flex justify-between items-center">
+      <div>
+        <h3 class="font-semibold">{{name}}</h3>
+        <p class="text-sm text-gray-500">{{description}}</p>
+        <span class="text-xs text-gray-400">Schema: <code>{{schema_key}}</code></span>
+      </div>
+      <form method="POST" action="/admin/seed/load?tenant_id={{../activeTenantId}}">
+        <input type="hidden" name="template_id" value="{{id}}">
+        <input type="hidden" name="schema_key" value="{{schema_key}}">
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">
+          Load Template
+        </button>
+      </form>
+    </div>
+    {{/each}}
+  </div>
+
+  {{#unless templates.length}}
+  <p class="text-gray-400 text-center py-6">No templates available. Run the seed script to create templates.</p>
+  {{/unless}}
+</div>
+
+<div class="bg-white shadow rounded-lg p-6 mt-6">
+  <h2 class="text-lg font-semibold mb-4">Available Templates in Seed</h2>
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b text-left text-gray-500">
+        <th class="py-2 px-3">Template</th>
+        <th class="py-2 px-3">Schema</th>
+        <th class="py-2 px-3">Description</th>
+        <th class="py-2 px-3">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="border-b">
+        <td class="py-2 px-3 font-medium">Default CBSE</td>
+        <td class="py-2 px-3"><code>attendance.statuses</code></td>
+        <td class="py-2 px-3 text-sm">3-status (Present/Absent/Late), grade bands, semester</td>
+        <td class="py-2 px-3"><span class="status-badge bg-green-100 text-green-800">Seeded</span></td>
+      </tr>
+      <tr class="border-b">
+        <td class="py-2 px-3 font-medium">Default ICSE</td>
+        <td class="py-2 px-3"><code>attendance.statuses</code></td>
+        <td class="py-2 px-3 text-sm">5-status (+Half Day, Medical), percentage, trimester</td>
+        <td class="py-2 px-3"><span class="status-badge bg-green-100 text-green-800">Seeded</span></td>
+      </tr>
+      <tr class="border-b">
+        <td class="py-2 px-3 font-medium">Default International</td>
+        <td class="py-2 px-3"><code>attendance.statuses</code></td>
+        <td class="py-2 px-3 text-sm">Period-based, GPA 4.0, quarterly, excused status</td>
+        <td class="py-2 px-3"><span class="status-badge bg-green-100 text-green-800">Seeded</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

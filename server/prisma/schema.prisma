@@ -1,0 +1,858 @@
+// ============================================================================
+// EduTech — Prisma Schema (Engine-First Architecture)
+// Phase 0: Database Foundation
+// ============================================================================
+// CRITICAL RULES:
+//  1. ZERO business enums — all statuses/types use reference data tables
+//  2. All tenant-scoped tables include tenant_id
+//  3. metadata JSONB on all entities (Student, Staff, Homework, Exam)
+//  4. Engine tables built BEFORE business module tables
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CORE IDENTITY TENANT — Foundation for all multi-tenant data
+// ============================================================================
+
+model Tenant {
+  id         String   @id @default(uuid())
+  slug       String   @unique
+  name       String
+  logo_url   String?
+  is_active  Boolean  @default(true)
+  metadata   Json     @default("{}")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users              User[]
+  configs            TenantConfig[]
+  students           Student[]
+  staff              Staff[]
+  academicYears      AcademicYear[]
+  attendanceStatuses AttendanceStatus[]
+  assessmentTypes    AssessmentType[]
+  leaveTypes         LeaveType[]
+  homeworkCategories HomeworkCategory[]
+  notificationTypes  NotificationTypeDef[]
+  grades             Grade[]
+  sections           Section[]
+  subjects           Subject[]
+  classes            Class[]
+  ruleSets           RuleSet[]
+  workflowDefs       WorkflowDefinition[]
+  workflowInstances  WorkflowInstance[]
+  attendance         Attendance[]
+  exams              Exam[]
+  examScores         ExamScore[]
+  homework           Homework[]
+  homeworkSubmissions HomeworkSubmission[]
+  leaveRequests      LeaveRequest[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  entityFields       EntityFieldDefinition[]
+  documentTemplates  DocumentTemplate[]
+  generatedDocs      GeneratedDocument[]
+
+  @@map("tenants")
+}
+
+// ============================================================================
+// AUTH USERS
+// ============================================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  PRINCIPAL
+  TEACHER
+  PARENT
+  STUDENT
+  STAFF
+  COUNSELOR
+}
+
+model User {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  email           String    @unique
+  password_hash   String?
+  supertokens_id  String?   @unique
+  first_name      String
+  last_name       String
+  role            UserRole  @default(TEACHER)
+  is_active       Boolean   @default(true)
+  last_login_at   DateTime?
+  metadata        Json      @default("{}")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  tenant          Tenant                 @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, role])
+  @@index([tenant_id, email])
+  @@map("users")
+}
+
+// ============================================================================
+// REFERENCE DATA TABLES — Replace ALL business enums
+// Tenant-defined statuses / types / categories
+// ============================================================================
+
+// --- Attendance Statuses (per-tenant, replaces AttendanceStatus enum) ---
+model AttendanceStatus {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  code       String                        // 'PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'MEDICAL_LEAVE'
+  label      Json                          // { en: "Present", hi: "उपस्थित", mr: "उपस्थित" }
+  color      String   @default("#10B981")
+  icon       String?
+  weight     Decimal  @default(1.0)        @db.Decimal(3, 2)  // 1.0=full, 0.5=half, 0.0=absent
+  is_present Boolean  @default(true)
+  is_default Boolean  @default(false)
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("attendance_statuses")
+}
+
+// --- Assessment / Exam Types (per-tenant, replaces ExamType enum) ---
+model AssessmentType {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  code       String                        // 'UNIT_TEST', 'MID_TERM', 'FINAL', 'QUIZ', 'PRACTICAL'
+  label      Json
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("assessment_types")
+}
+
+// --- Leave Types (per-tenant, replaces LeaveType enum) ---
+model LeaveType {
+  id                String   @id @default(uuid())
+  tenant_id         String
+  code              String                 // 'SICK', 'CASUAL', 'EMERGENCY', 'MATERNITY'
+  label             Json
+  max_days          Int?
+  requires_document Boolean  @default(false)
+  is_active         Boolean  @default(true)
+
+  tenant            Tenant   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("leave_types")
+}
+
+// --- Homework / Assignment Categories (per-tenant) ---
+model HomeworkCategory {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  code       String                        // 'CLASSWORK', 'HOMEWORK', 'PROJECT', 'PRACTICAL'
+  label      Json
+  is_active  Boolean  @default(true)
+
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("homework_categories")
+}
+
+// --- Notification Type Definitions (per-tenant) ---
+model NotificationTypeDef {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  code        String                       // 'ABSENCE_ALERT', 'HOMEWORK_DUE', 'FEE_REMINDER'
+  label       Json
+  description String?
+  is_active   Boolean  @default(true)
+
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("notification_type_defs")
+}
+
+// ============================================================================
+// ACADEMIC STRUCTURE — Calendar, Grades, Sections, Subjects
+// ============================================================================
+
+model AcademicYear {
+  id         String         @id @default(uuid())
+  tenant_id  String
+  name       String                         // '2026-2027'
+  start_date DateTime
+  end_date   DateTime
+  is_active  Boolean        @default(true)
+  created_at DateTime       @default(now())
+  updated_at DateTime       @updatedAt
+
+  tenant     Tenant         @relation(fields: [tenant_id], references: [id])
+  terms      AcademicTerm[]
+
+  @@unique([tenant_id, name])
+  @@index([tenant_id, is_active])
+  @@map("academic_years")
+}
+
+model AcademicTerm {
+  id               String       @id @default(uuid())
+  academic_year_id String
+  code             String                   // 'SEM1', 'TRI1', 'Q1'
+  name             String                   // 'Semester 1', 'Trimester 1', 'Quarter 1'
+  start_date       DateTime
+  end_date         DateTime
+  term_type        String                   // 'semester', 'trimester', 'quarter', 'custom'
+  sort_order       Int          @default(0)
+  is_active        Boolean      @default(true)
+
+  academic_year    AcademicYear @relation(fields: [academic_year_id], references: [id])
+
+  @@index([academic_year_id, sort_order])
+  @@map("academic_terms")
+}
+
+model Grade {
+  id         String    @id @default(uuid())
+  tenant_id  String
+  code       String                            // 'GRADE-1', 'GRADE-X'
+  name       String                            // 'Grade 1', 'Grade 10'
+  sort_order Int       @default(0)
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  tenant     Tenant    @relation(fields: [tenant_id], references: [id])
+  sections   Section[]
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("grades")
+}
+
+model Section {
+  id              String     @id @default(uuid())
+  tenant_id       String
+  grade_id        String
+  code            String                         // 'A', 'B', 'C'
+  name            String                         // 'Section A'
+  class_teacher_id String?
+  capacity        Int?
+  is_active       Boolean    @default(true)
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+
+  tenant          Tenant     @relation(fields: [tenant_id], references: [id])
+  grade           Grade      @relation(fields: [grade_id], references: [id])
+  class_teacher   Staff?     @relation("ClassTeacher", fields: [class_teacher_id], references: [id])
+
+  @@unique([tenant_id, grade_id, code])
+  @@index([tenant_id, grade_id])
+  @@map("sections")
+}
+
+model Subject {
+  id         String    @id @default(uuid())
+  tenant_id  String
+  code       String                             // 'MATH', 'SCI', 'ENG'
+  name       String                             // 'Mathematics', 'Science', 'English'
+  is_core    Boolean   @default(false)
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  tenant     Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("subjects")
+}
+
+model Class {
+  id         String    @id @default(uuid())
+  tenant_id  String
+  grade_id   String
+  section_id String
+  subject_id String
+  teacher_id String?
+  academic_term_id String?
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  tenant     Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, grade_id, section_id, subject_id, academic_term_id])
+  @@index([tenant_id, teacher_id])
+  @@map("classes")
+}
+
+// ============================================================================
+// PEOPLE — Students, Staff, Parents
+// ============================================================================
+
+model Student {
+  id                       String    @id @default(uuid())
+  tenant_id                String
+  user_id                  String    @unique
+  student_id_card          String    @unique
+  first_name               String
+  last_name                String
+  date_of_birth            DateTime
+  grade_level              String
+  parent_id                String?
+  parent2_id               String?
+  current_engagement_score Int       @default(100)
+  metadata                 Json      @default("{}")   // Custom fields via Metadata Engine
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @updatedAt
+  deleted_at               DateTime?
+
+  tenant                   Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, grade_level])
+  @@index([tenant_id, parent_id])
+  @@index([tenant_id, first_name, last_name])
+  @@map("students")
+}
+
+model Staff {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  user_id         String    @unique
+  staff_id_card   String    @unique
+  first_name      String
+  last_name       String
+  date_of_birth   DateTime?
+  designation     String?
+  qualifications  String?
+  metadata        Json      @default("{}")   // Custom fields via Metadata Engine
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  deleted_at      DateTime?
+
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id])
+  class_teacher_mapping Section[] @relation("ClassTeacher")
+
+  @@index([tenant_id, designation])
+  @@map("staff")
+}
+
+// ============================================================================
+// BUSINESS ENTITIES — Attendance, Homework, Exams, Leave
+// ============================================================================
+
+model Attendance {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  student_id      String
+  class_id        String
+  status_code     String                    // References AttendanceStatus.code (NOT an enum!)
+  marked_by       String?
+  date            DateTime  @db.Date
+  period          Int?
+  notes           String?   @db.Text
+  metadata        Json      @default("{}")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@unique([student_id, class_id, date, period])
+  @@index([tenant_id, class_id, date])
+  @@index([tenant_id, student_id, date])
+  @@map("attendance")
+}
+
+model Homework {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  title           String
+  description     String?   @db.Text
+  category_code   String                    // References HomeworkCategory.code (NOT an enum!)
+  class_id        String
+  subject_id      String
+  teacher_id      String
+  due_date        DateTime?
+  max_score       Decimal?  @db.Decimal(5, 2)
+  status          String    @default("DRAFT")  // DRAFT → SCHEDULED → PUBLISHED → ARCHIVED
+  metadata        Json      @default("{}")   // Custom fields
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id])
+  submissions     HomeworkSubmission[]
+
+  @@index([tenant_id, class_id, due_date])
+  @@index([tenant_id, subject_id, status])
+  @@index([tenant_id, title])
+  @@map("homework")
+}
+
+model HomeworkSubmission {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  homework_id     String
+  student_id      String
+  content         String?   @db.Text
+  file_urls       Json?                      // Array of S3 URLs
+  submitted_at    DateTime?
+  score           Decimal?  @db.Decimal(5, 2)
+  grade           String?
+  grade_point     Decimal?  @db.Decimal(3, 2)
+  feedback        String?   @db.Text
+  status          String    @default("PENDING")  // PENDING → SUBMITTED → GRADED → RETURNED
+  metadata        Json      @default("{}")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id])
+  homework        Homework  @relation(fields: [homework_id], references: [id])
+
+  @@unique([homework_id, student_id])
+  @@index([tenant_id, student_id, status])
+  @@map("homework_submissions")
+}
+
+model Exam {
+  id               String    @id @default(uuid())
+  tenant_id        String
+  title            String
+  type_code        String                         // References AssessmentType.code (NOT an enum!)
+  class_id         String
+  subject_id       String?
+  academic_term_id String?
+  date             DateTime  @db.Date
+  max_score        Decimal   @db.Decimal(5, 2)
+  pass_score       Decimal?  @db.Decimal(5, 2)
+  description      String?   @db.Text
+  created_by       String?
+  metadata         Json      @default("{}")
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  tenant           Tenant    @relation(fields: [tenant_id], references: [id])
+  scores           ExamScore[]
+
+  @@index([tenant_id, class_id, date])
+  @@index([tenant_id, academic_term_id])
+  @@map("exams")
+}
+
+model ExamScore {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  exam_id     String
+  student_id  String
+  score       Decimal  @db.Decimal(5, 2)    // Raw score (for calculation)
+  grade       String?                       // Derived grade label (A+, B, etc.) — populated by Rules Engine
+  grade_point Decimal? @db.Decimal(3, 2)   // GPA points — populated by Rules Engine
+  remarks     String?  @db.Text
+  is_absent   Boolean  @default(false)
+  metadata    Json     @default("{}")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+  exam        Exam     @relation(fields: [exam_id], references: [id])
+
+  @@unique([exam_id, student_id])
+  @@index([tenant_id, exam_id])
+  @@index([tenant_id, student_id])
+  @@map("exam_scores")
+}
+
+model LeaveRequest {
+  id                    String    @id @default(uuid())
+  tenant_id             String
+  student_id            String?
+  staff_id              String?
+  parent_id             String?
+  type_code             String                 // References LeaveType.code (NOT an enum!)
+  start_date            DateTime  @db.Date
+  end_date              DateTime  @db.Date
+  reason                String    @db.Text
+  status                String    @default("PENDING")  // Current workflow state (NOT an enum!)
+  reviewed_by           String?
+  review_notes          String?   @db.Text
+  workflow_instance_id  String?                // Links to Workflow Engine instance
+  metadata              Json      @default("{}")
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+  deleted_at            DateTime?
+
+  tenant                Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, student_id, status])
+  @@index([tenant_id, status, start_date])
+  @@map("leave_requests")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  recipient_id    String
+  type_code       String                       // From NotificationTypeDef
+  title           String
+  body            String    @db.Text
+  channel         String    @default("in_app") // in_app, email, sms, push
+  is_read         Boolean   @default(false)
+  read_at         DateTime?
+  metadata        Json      @default("{}")
+  created_at      DateTime  @default(now())
+
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, recipient_id, is_read])
+  @@index([tenant_id, created_at])
+  @@map("notifications")
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  tenant_id   String
+  user_id     String?
+  action      String                         // 'attendance:mark', 'LOGIN_SUCCESS', etc.
+  resource    String                         // 'Attendance', 'User', etc.
+  resource_id String?
+  details     Json?                          // Contextual data
+  ip_address  String?
+  user_agent  String?
+  created_at  DateTime  @default(now())
+
+  tenant      Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, created_at])
+  @@index([user_id, created_at])
+  @@index([action, created_at])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// ENGINE TABLES — Phase 0 Core
+// ============================================================================
+
+// --- Configuration Engine ---
+model ConfigSchema {
+  id          String   @id @default(uuid())
+  schema_key  String   @unique                     // 'attendance.statuses', 'grading.scale'
+  name        String
+  description String?
+  json_schema Json
+  ui_schema   Json?
+  version     Int      @default(1)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+
+
+  @@map("config_schemas")
+}
+
+model TenantConfig {
+  id             String       @id @default(uuid())
+  tenant_id      String
+  schema_key     String                           // References config_schemas.schema_key
+  config_value   Json
+  version        Int          @default(1)
+  is_active      Boolean      @default(true)
+  inherited_from String?                          // Points to config_templates.id
+  overrides      Json?
+  created_by     String?
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
+
+  tenant         Tenant       @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, schema_key, version])
+  @@index([tenant_id, schema_key, is_active])
+  @@map("tenant_configs")
+}
+
+model ConfigTemplate {
+  id           String   @id @default(uuid())
+  name         String                             // 'Default CBSE', 'ICSE Standard'
+  description  String?
+  schema_key   String
+  config_value Json
+  is_default   Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  @@map("config_templates")
+}
+
+// --- Rules Engine ---
+model RuleSet {
+  id          String    @id @default(uuid())
+  tenant_id   String
+  code        String                              // 'grading.convert_score', 'promotion.eligibility'
+  name        String
+  description String?
+  version     Int       @default(1)
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenant_id], references: [id])
+  rules       Rule[]
+
+  @@unique([tenant_id, code, version])
+  @@index([tenant_id, code])
+  @@map("rule_sets")
+}
+
+model Rule {
+  id          String   @id @default(uuid())
+  rule_set_id String
+  priority    Int      @default(0)                 // Lower = evaluated first
+  name        String
+  description String?
+  condition   Json?                               // When to apply this rule
+  action      Json                                 // What to do
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  ruleSet     RuleSet  @relation(fields: [rule_set_id], references: [id])
+
+  @@index([rule_set_id, priority])
+  @@map("rules")
+}
+
+// --- Workflow Engine ---
+model WorkflowDefinition {
+  id          String              @id @default(uuid())
+  tenant_id   String
+  code        String                              // 'leave_approval', 'attendance_correction'
+  name        String
+  description String?
+  version     Int                 @default(1)
+  is_active   Boolean             @default(true)
+  created_at  DateTime            @default(now())
+  updated_at  DateTime            @updatedAt
+
+  tenant      Tenant              @relation(fields: [tenant_id], references: [id])
+  states      WorkflowState[]
+  transitions WorkflowTransition[]
+
+  @@unique([tenant_id, code, version])
+  @@index([tenant_id, code])
+  @@map("workflow_definitions")
+}
+
+model WorkflowState {
+  id          String             @id @default(uuid())
+  workflow_id String
+  code        String                              // 'PENDING', 'WITH_TEACHER', 'APPROVED'
+  name        String
+  is_initial  Boolean            @default(false)
+  is_final    Boolean            @default(false)
+  color       String?
+  metadata    Json               @default("{}")
+  sort_order  Int                @default(0)
+
+  workflow    WorkflowDefinition @relation(fields: [workflow_id], references: [id])
+  fromTransitions WorkflowTransition[] @relation("FromState")
+  toTransitions   WorkflowTransition[] @relation("ToState")
+
+  @@unique([workflow_id, code])
+  @@map("workflow_states")
+}
+
+model WorkflowTransition {
+  id           String             @id @default(uuid())
+  workflow_id  String
+  from_state_id String
+  to_state_id  String
+  name         String                              // 'Approve', 'Reject', 'Forward'
+  actor_roles  Json                                // ['TEACHER', 'PRINCIPAL']
+  actor_type   String            @default("role")  // 'role', 'specific_user', 'dynamic'
+  conditions   Json?
+  actions      Json?
+  sort_order   Int               @default(0)
+
+  workflow     WorkflowDefinition @relation(fields: [workflow_id], references: [id])
+  from_state   WorkflowState     @relation("FromState", fields: [from_state_id], references: [id])
+  to_state     WorkflowState     @relation("ToState", fields: [to_state_id], references: [id])
+
+  @@unique([workflow_id, from_state_id, to_state_id])
+  @@map("workflow_transitions")
+}
+
+model WorkflowInstance {
+  id                String    @id @default(uuid())
+  tenant_id         String
+  workflow_code     String
+  entity_type       String                        // 'LeaveRequest', 'AttendanceCorrection'
+  entity_id         String
+  current_state_id  String
+  context           Json      @default("{}")
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  tenant            Tenant    @relation(fields: [tenant_id], references: [id])
+  history           WorkflowHistory[]
+
+  @@index([tenant_id, entity_type, entity_id])
+  @@index([tenant_id, workflow_code, current_state_id])
+  @@map("workflow_instances")
+}
+
+model WorkflowHistory {
+  id               String    @id @default(uuid())
+  instance_id      String
+  transition_id    String
+  actor_id         String?
+  from_state_code  String
+  to_state_code    String
+  comment          String?   @db.Text
+  metadata         Json      @default("{}")
+  created_at       DateTime  @default(now())
+
+  instance         WorkflowInstance @relation(fields: [instance_id], references: [id])
+
+  @@index([instance_id, created_at])
+  @@map("workflow_history")
+}
+
+// --- Metadata Engine (foundation tables) ---
+model EntityFieldDefinition {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  entity_type String                              // 'Student', 'Staff', 'Homework', 'Exam'
+  field_key   String                              // 'blood_group', 'house_color'
+  label       Json                                // { en: "Blood Group", hi: "रक्त समूह" }
+  field_type  String                              // 'text', 'number', 'date', 'select', 'multiselect', 'boolean'
+  options     Json?                               // For select/multiselect
+  is_required Boolean  @default(false)
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, entity_type, field_key])
+  @@index([tenant_id, entity_type])
+  @@map("entity_field_definitions")
+}
+
+// --- Template Engine (foundation tables) ---
+model DocumentTemplate {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  code            String                              // 'cbse_report_card', 'transfer_certificate'
+  name            String
+  description     String?
+  template_type   String    @default("handlebars")     // 'handlebars', 'react-pdf'
+  content         String    @db.Text                    // Handlebars template or React-PDF component definition
+  css_content     String?   @db.Text
+  output_format   String    @default("pdf")            // 'pdf', 'html'
+  page_size       String    @default("A4")             // 'A4', 'Letter'
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@unique([tenant_id, code])
+  @@index([tenant_id])
+  @@map("document_templates")
+}
+
+model GeneratedDocument {
+  id           String    @id @default(uuid())
+  tenant_id    String
+  template_id  String
+  entity_type  String                                // 'Student', 'ReportCard'
+  entity_id    String
+  file_url     String?                               // S3 URL to generated document
+  status       String    @default("PENDING")         // PENDING, PROCESSING, COMPLETED, FAILED
+  error_message String?  @db.Text
+  generated_at DateTime?
+  created_at   DateTime  @default(now())
+
+  tenant       Tenant    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, entity_type, entity_id])
+  @@index([tenant_id, status])
+  @@map("generated_documents")
+}
+
+// ============================================================================
+// PERMISSIONS RBAC
+// ============================================================================
+
+model Permission {
+  id              String           @id @default(uuid())
+  code            String           @unique
+  name            String
+  description     String?
+  group_name      String
+
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            String    @id @default(uuid())
+  role          UserRole
+  permission_id String
+
+  permission    Permission @relation(fields: [permission_id], references: [id])
+
+  @@unique([role, permission_id])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id            String     @id @default(uuid())
+  user_id       String
+  permission_id String
+  permission    Permission @relation(fields: [permission_id], references: [id])
+
+  @@unique([user_id, permission_id])
+  @@index([user_id])
+  @@map("user_permissions")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  user_id    String
+  token      String    @unique
+  expires_at DateTime
+  revoked_at DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([user_id])
+  @@index([token])
+  @@map("refresh_tokens")
+}

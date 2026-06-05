@@ -1,0 +1,386 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Configuration Context API
+  description: |
+    Configuration Engine API — hierarchical tenant configuration with JSON Schema validation,
+    versioning, rollback, and template inheritance.
+  version: "0.1.0"
+servers:
+  - url: /api/v1
+    description: EduTech Backend API
+tags:
+  - name: Config Schemas
+    description: Manage configuration schema registry
+  - name: Tenant Config
+    description: Read/write tenant configuration values
+  - name: Templates
+    description: Pre-built configuration templates
+  - name: Convenience
+    description: Typed convenience accessors for known schemas
+
+paths:
+  # =========================================================================
+  # Schema Registry
+  # =========================================================================
+  /{tenantId}/config/schemas:
+    get:
+      tags: [Config Schemas]
+      summary: List all config schemas
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Schema list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConfigSchemaSummary"
+    post:
+      tags: [Config Schemas]
+      summary: Register a new config schema
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConfigSchemaInput"
+      responses:
+        "201":
+          description: Schema created
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  # =========================================================================
+  # Tenant Config CRUD
+  # =========================================================================
+  /{tenantId}/config/{schemaKey}:
+    get:
+      tags: [Tenant Config]
+      summary: Get active config for a schema key
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: schemaKey
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Active config value (resolved from inheritance if applicable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+    put:
+      tags: [Tenant Config]
+      summary: Update config (creates new version, validates against schema)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: schemaKey
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: object
+                  description: The configuration value to set
+      responses:
+        "200":
+          description: Config updated (new version created)
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /{tenantId}/config/{schemaKey}/history:
+    get:
+      tags: [Tenant Config]
+      summary: Get version history
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: schemaKey
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Version history list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConfigVersionEntry"
+
+  /{tenantId}/config/{schemaKey}/rollback:
+    post:
+      tags: [Tenant Config]
+      summary: Rollback to a specific version
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: schemaKey
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  description: Version number to rollback to
+      responses:
+        "200":
+          description: Rollback successful — new version created with old value
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # =========================================================================
+  # Templates
+  # =========================================================================
+  /{tenantId}/config/templates/list:
+    get:
+      tags: [Templates]
+      summary: List config templates
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: schema_key
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Template list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConfigTemplate"
+
+  /{tenantId}/config/{schemaKey}/from-template:
+    post:
+      tags: [Templates]
+      summary: Set config from a template with optional overrides
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: schemaKey
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template_id]
+              properties:
+                template_id:
+                  type: string
+                overrides:
+                  type: object
+      responses:
+        "200":
+          description: Config created from template
+
+  # =========================================================================
+  # Convenience Endpoints
+  # =========================================================================
+  /{tenantId}/config/convenience/attendance-statuses:
+    get:
+      tags: [Convenience]
+      summary: Get tenant's attendance status definitions
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Attendance statuses
+  /{tenantId}/config/convenience/grading-scale:
+    get:
+      tags: [Convenience]
+      summary: Get tenant's grading scale
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Grading scale
+  /{tenantId}/config/convenience/academic-calendar:
+    get:
+      tags: [Convenience]
+      summary: Get tenant's active academic calendar
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Academic calendar with terms
+  /{tenantId}/config/convenience/leave-types:
+    get:
+      tags: [Convenience]
+      summary: Get tenant's leave type definitions
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Leave types
+
+# ============================================================================
+# Components
+# ============================================================================
+components:
+  schemas:
+    ConfigSchemaSummary:
+      type: object
+      properties:
+        schema_key:
+          type: string
+          example: "attendance.statuses"
+        name:
+          type: string
+          example: "Attendance Statuses"
+        description:
+          type: string
+        version:
+          type: integer
+    CreateConfigSchemaInput:
+      type: object
+      required: [schema_key, name, json_schema]
+      properties:
+        schema_key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        json_schema:
+          type: object
+          description: JSON Schema draft-2020-12
+        ui_schema:
+          type: object
+          description: UI rendering hints
+    ConfigVersionEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        config_value:
+          type: object
+        inherited_from:
+          type: string
+        overrides:
+          type: object
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    ConfigTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Default CBSE"
+        description:
+          type: string
+        schema_key:
+          type: string
+        is_default:
+          type: boolean
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: "CONFIG_VALIDATION_FAILED"
+              message: "Config validation failed for \"grading.scale\": /bands/0/min must be >= 0"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: "NOT_FOUND"
+              message: "Version 5 not found for grading.scale"

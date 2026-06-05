@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  # ============================================
+  # PostgreSQL 16 — Primary Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: edutech-postgres
+    environment:
+      POSTGRES_USER: edutech
+      POSTGRES_PASSWORD: edutech_dev
+      POSTGRES_DB: edutech
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edutech -d edutech"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis 7 — Cache + Event Bus
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: edutech-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================
+  # SuperTokens — Authentication Service
+  # ============================================
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:9.3.0
+    container_name: edutech-supertokens
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3567:3567"
+    environment:
+      POSTGRESQL_CONNECTION_URI: "postgresql://edutech:edutech_dev@postgres:5432/edutech"
+      API_KEYS: "edutech-supertokens-api-key-dev"
+      SUPERTOKENS_PORT: 3567
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3567/hello"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

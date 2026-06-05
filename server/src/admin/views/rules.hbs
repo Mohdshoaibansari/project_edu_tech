@@ -1,0 +1,49 @@
+<h1 class="text-2xl font-bold mb-6">{{title}}</h1>
+<p class="text-gray-600 mb-6">View rule sets with their conditions and actions. Rules drive grade calculation, attendance aggregation, and promotion eligibility.</p>
+
+{{#each ruleSets}}
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+  <div class="flex justify-between items-start mb-4">
+    <div>
+      <h2 class="text-lg font-bold">{{name}}</h2>
+      <span class="text-sm text-gray-500">Code: <code class="bg-gray-100 px-1 rounded">{{code}}</code></span>
+      {{#if description}}<p class="text-sm text-gray-600 mt-1">{{description}}</p>{{/if}}
+    </div>
+    <span class="text-xs text-gray-400">v{{version}} | {{rules.length}} rules</span>
+  </div>
+
+  {{#if rules.length}}
+  <div class="space-y-4">
+    {{#each rules}}
+    <div class="border rounded-lg p-4 {{#unless is_active}}opacity-50{{/unless}}">
+      <div class="flex justify-between mb-2">
+        <span class="font-semibold text-sm">#{{priority}} — {{name}}</span>
+        {{#unless is_active}}<span class="status-badge bg-red-100 text-red-800">Inactive</span>{{/unless}}
+      </div>
+      {{#if description}}<p class="text-xs text-gray-500 mb-2">{{description}}</p>{{/if}}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div>
+          <span class="font-medium text-gray-500">CONDITION</span>
+          <pre class="bg-gray-900 text-green-400 p-2 rounded mt-1 overflow-x-auto">{{conditionJson}}</pre>
+        </div>
+        <div>
+          <span class="font-medium text-gray-500">ACTION</span>
+          <pre class="bg-gray-900 text-yellow-400 p-2 rounded mt-1 overflow-x-auto">{{actionJson}}</pre>
+        </div>
+      </div>
+    </div>
+    {{/each}}
+  </div>
+  {{else}}
+  <p class="text-gray-400 text-sm">No rules defined in this set.</p>
+  {{/if}}
+</div>
+{{/each}}
+
+{{#unless ruleSets.length}}
+<div class="bg-white shadow rounded-lg p-12 text-center text-gray-400">
+  <p class="text-lg">No rule sets defined</p>
+  <p class="text-sm mt-2">Rule sets are created via the Rules API.</p>
+</div>
+{{/unless}}

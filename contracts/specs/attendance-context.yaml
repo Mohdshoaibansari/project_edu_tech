@@ -1,0 +1,203 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Attendance Context API
+  description: |
+    Config-driven attendance management — dynamic status toggles from ConfigEngine,
+    rules-based calculation, workflow-based corrections.
+    **Phase 1 implementation.** Scaffolded in Phase 0.
+  version: "0.1.0"
+servers:
+  - url: /api/v1
+    description: EduTech Backend API
+tags:
+  - name: Attendance
+  - name: Attendance Corrections
+  - name: Attendance Reports
+
+paths:
+  /{tenantId}/attendance/statuses:
+    get:
+      tags: [Attendance]
+      summary: Get valid attendance statuses for this tenant (from ConfigEngine)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Status definitions with codes, labels (i18n), colors, weights } }
+
+  /{tenantId}/attendance/mark:
+    post:
+      tags: [Attendance]
+      summary: Mark attendance for a class on a date (batch)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [class_id, date, records]
+              properties:
+                class_id: { type: string }
+                date: { type: string, format: date }
+                records:
+                  type: array
+                  items:
+                    type: object
+                    required: [student_id, status_code]
+                    properties:
+                      student_id: { type: string }
+                      status_code: { type: string }
+                      period: { type: integer }
+                      notes: { type: string }
+      responses:
+        "200": { description: Attendance marked — emits attendance.marked event }
+        "400": { description: Invalid status code for tenant }
+
+  /{tenantId}/attendance/students/{studentId}:
+    get:
+      tags: [Attendance]
+      summary: Get attendance history for a student
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: studentId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 50 }
+      responses: { "200": { description: Paginated attendance records } }
+
+  /{tenantId}/attendance/calculate-rate:
+    get:
+      tags: [Attendance Reports]
+      summary: Calculate attendance rate via RulesEngine
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: student_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Attendance rate calculated by RulesEngine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      rate: { type: number }
+                      days_present: { type: integer }
+                      days_total: { type: integer }
+                      breakdown: { type: object }
+
+  /{tenantId}/attendance/class/{classId}/date/{date}:
+    get:
+      tags: [Attendance]
+      summary: Get attendance for a specific class and date (roll-call view)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: classId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+      responses: { "200": { description: Class roll-call with current statuses } }
+
+  # Attendance Corrections
+  /{tenantId}/attendance/corrections:
+    post:
+      tags: [Attendance Corrections]
+      summary: Request attendance correction (starts workflow)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attendance_id, new_status_code]
+              properties:
+                attendance_id: { type: string }
+                new_status_code: { type: string }
+                reason: { type: string }
+      responses:
+        "200": { description: Correction request created — workflow started }
+    get:
+      tags: [Attendance Corrections]
+      summary: List pending corrections for approval
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses: { "200": { description: Correction list } }
+
+  /{tenantId}/attendance/corrections/{correctionId}/action:
+    post:
+      tags: [Attendance Corrections]
+      summary: Approve or reject a correction (workflow transition)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: correctionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [Approve, Reject] }
+                comment: { type: string }
+      responses:
+        "200": { description: Transition executed via WorkflowEngine }

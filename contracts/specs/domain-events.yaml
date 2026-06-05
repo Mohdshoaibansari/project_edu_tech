@@ -1,0 +1,130 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Domain Events Catalog
+  description: |
+    All domain events emitted by the EventBus. Contexts communicate ONLY through these events.
+    This is the shared kernel for inter-context communication.
+  version: "0.1.0"
+
+components:
+  schemas:
+    AttendanceMarked:
+      type: object
+      required: [tenantId, studentId, classId, statusCode, date]
+      properties:
+        tenantId: { type: string }
+        studentId: { type: string }
+        classId: { type: string }
+        statusCode: { type: string }
+        date: { type: string }
+
+    AttendanceCorrected:
+      type: object
+      required: [tenantId, attendanceId, oldStatus, newStatus]
+      properties:
+        tenantId: { type: string }
+        attendanceId: { type: string }
+        oldStatus: { type: string }
+        newStatus: { type: string }
+
+    HomeworkAssigned:
+      type: object
+      required: [tenantId, homeworkId, classId, dueDate]
+      properties:
+        tenantId: { type: string }
+        homeworkId: { type: string }
+        classId: { type: string }
+        dueDate: { type: string }
+
+    HomeworkSubmitted:
+      type: object
+      required: [tenantId, submissionId, studentId]
+      properties:
+        tenantId: { type: string }
+        submissionId: { type: string }
+        studentId: { type: string }
+
+    HomeworkGraded:
+      type: object
+      required: [tenantId, submissionId, score, grade]
+      properties:
+        tenantId: { type: string }
+        submissionId: { type: string }
+        score: { type: number }
+        grade: { type: string }
+
+    ExamScoreEntered:
+      type: object
+      required: [tenantId, examId, studentId]
+      properties:
+        tenantId: { type: string }
+        examId: { type: string }
+        studentId: { type: string }
+
+    LeaveApplied:
+      type: object
+      required: [tenantId, leaveId, workflowInstanceId]
+      properties:
+        tenantId: { type: string }
+        leaveId: { type: string }
+        workflowInstanceId: { type: string }
+
+    LeaveApproved:
+      type: object
+      required: [tenantId, leaveId]
+      properties:
+        tenantId: { type: string }
+        leaveId: { type: string }
+
+    WorkflowTransitioned:
+      type: object
+      required: [tenantId, workflowCode, fromState, toState, instanceId]
+      properties:
+        tenantId: { type: string }
+        workflowCode: { type: string }
+        fromState: { type: string }
+        toState: { type: string }
+        instanceId: { type: string }
+
+    ConfigChanged:
+      type: object
+      required: [tenantId, schemaKey, version]
+      properties:
+        tenantId: { type: string }
+        schemaKey: { type: string }
+        version: { type: integer }
+
+    StudentEnrolled:
+      type: object
+      required: [tenantId, studentId]
+      properties:
+        tenantId: { type: string }
+        studentId: { type: string }
+
+    StudentRiskFlagged:
+      type: object
+      required: [tenantId, studentId, riskLevel]
+      properties:
+        tenantId: { type: string }
+        studentId: { type: string }
+        riskLevel: { type: string, enum: [low, medium, high] }
+
+  # Event subscription map — which contexts subscribe to which events
+  x-event-subscriptions:
+    CommunicationContext:
+      subscribes_to:
+        - attendance.marked
+        - attendance.corrected
+        - homework.assigned
+        - homework.submitted
+        - homework.graded
+        - exam.score_entered
+        - leave.applied
+        - leave.approved
+        - student.risk_flagged
+    LeaveContext:
+      subscribes_to:
+        - workflow.transitioned
+    ConfigurationContext:
+      publishes:
+        - config.changed

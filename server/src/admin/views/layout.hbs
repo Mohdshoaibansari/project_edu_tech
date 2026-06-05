@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{title}} — EduTech</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .flash-success { background-color: #d1fae5; border: 1px solid #6ee7b7; color: #065f46; }
+    .flash-error { background-color: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .workflow-node { border: 2px solid #e5e7eb; border-radius: 8px; padding: 8px 16px; text-align: center; min-width: 120px; }
+    .workflow-node.initial { border-color: #3b82f6; }
+    .workflow-node.final { border-color: #10b981; }
+    .workflow-arrow { font-size: 20px; color: #9ca3af; padding: 0 8px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+  <div class="flex">
+    <!-- Sidebar -->
+    <aside class="w-56 bg-gray-900 text-white min-h-screen p-4 sticky top-0">
+      <h1 class="text-lg font-bold mb-6">EduTech Admin</h1>
+      <nav class="space-y-1 text-sm">
+        <a href="/admin" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.dashboard}}bg-gray-700{{/if}}">Dashboard</a>
+        <a href="/admin/attendance-statuses" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.attendance}}bg-gray-700{{/if}}">Attendance Statuses</a>
+        <a href="/admin/grading-scale" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.grading}}bg-gray-700{{/if}}">Grading Scale</a>
+        <a href="/admin/academic-calendar" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.calendar}}bg-gray-700{{/if}}">Academic Calendar</a>
+        <a href="/admin/workflows" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.workflows}}bg-gray-700{{/if}}">Workflows</a>
+        <a href="/admin/rules" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.rules}}bg-gray-700{{/if}}">Rule Sets</a>
+        <a href="/admin/seed" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.seed}}bg-gray-700{{/if}}">Seed Templates</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-6">
+      <!-- Tenant Selector -->
+      {{#if tenants.length}}
+      <div class="mb-6 flex items-center gap-4">
+        <label class="text-sm font-medium text-gray-600">Tenant:</label>
+        <select onchange="location.href='?tenant_id='+this.value"
+                class="border rounded px-3 py-1.5 text-sm bg-white">
+          {{#each tenants}}
+          <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}} ({{slug}})</option>
+          {{/each}}
+        </select>
+        {{#if activeTenant}}
+        <span class="text-xs text-gray-400">{{activeTenantId}}</span>
+        {{/if}}
+      </div>
+      {{/if}}
+
+      <!-- Flash Messages -->
+      {{#if success}}
+      <div class="flash-success px-4 py-2 rounded mb-4 text-sm">{{success}}</div>
+      {{/if}}
+      {{#if error}}
+      <div class="flash-error px-4 py-2 rounded mb-4 text-sm">{{error}}</div>
+      {{/if}}
+
+      {{{body}}}
+    </main>
+  </div>
+</body>
+</html>

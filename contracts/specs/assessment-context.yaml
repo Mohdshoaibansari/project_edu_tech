@@ -1,0 +1,263 @@
+openapi: "3.1.0"
+info:
+  title: EduTech — Assessment Context API
+  description: |
+    Exam management and config-driven grading — RulesEngine-powered score-to-grade conversion,
+    GPA calculation, promotion eligibility. Assessment types from reference data (not enums).
+    **Phase 1 implementation.** Scaffolded in Phase 0.
+  version: "0.1.0"
+servers:
+  - url: /api/v1
+    description: EduTech Backend API
+tags:
+  - name: Exams
+  - name: Scores
+  - name: Grading
+  - name: Promotion
+
+paths:
+  /{tenantId}/exams:
+    get:
+      tags: [Exams]
+      summary: List exams (filterable by class, term, type)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: class_id
+          in: query
+          schema: { type: string }
+        - name: academic_term_id
+          in: query
+          schema: { type: string }
+        - name: type_code
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses: { "200": { description: Paginated exam list } }
+    post:
+      tags: [Exams]
+      summary: Create an exam (type_code from reference data)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, type_code, class_id, date, max_score]
+              properties:
+                title: { type: string }
+                type_code: { type: string, example: "MID_TERM" }
+                class_id: { type: string }
+                subject_id: { type: string }
+                academic_term_id: { type: string }
+                date: { type: string, format: date }
+                max_score: { type: number }
+                pass_score: { type: number }
+                description: { type: string }
+      responses: { "201": { description: Exam created } }
+
+  /{tenantId}/exams/{examId}:
+    get:
+      tags: [Exams]
+      summary: Get exam details with scores
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: examId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: Exam with score list } }
+
+  /{tenantId}/exams/{examId}/scores:
+    put:
+      tags: [Scores]
+      summary: Enter scores (batch) — delegates to RulesEngine for grade conversion
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: examId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scores]
+              properties:
+                scores:
+                  type: array
+                  items:
+                    type: object
+                    required: [student_id, score]
+                    properties:
+                      student_id: { type: string }
+                      score: { type: number }
+                      is_absent: { type: boolean, default: false }
+                      remarks: { type: string }
+      responses:
+        "200":
+          description: Scores entered — grades auto-calculated by RulesEngine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        student_id: { type: string }
+                        score: { type: number }
+                        grade: { type: string }
+                        grade_point: { type: number }
+
+  /{tenantId}/grading/convert:
+    post:
+      tags: [Grading]
+      summary: Convert score to grade using tenant's grading rules
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score, max_score]
+              properties:
+                score: { type: number }
+                max_score: { type: number }
+      responses:
+        "200":
+          description: Grade result from RulesEngine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      grade: { type: string }
+                      percentage: { type: number }
+                      grade_point: { type: number }
+
+  /{tenantId}/grading/calculate-gpa:
+    post:
+      tags: [Grading]
+      summary: Calculate GPA from subject results
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subjects]
+              properties:
+                subjects:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      subject: { type: string }
+                      grade_point: { type: number }
+                      credit_hours: { type: number, default: 1 }
+      responses:
+        "200":
+          description: GPA result from RulesEngine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      gpa: { type: number }
+
+  /{tenantId}/promotion/check/{studentId}:
+    get:
+      tags: [Promotion]
+      summary: Check promotion eligibility via RulesEngine
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: studentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Promotion result from RulesEngine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      eligible: { type: boolean }
+                      reason: { type: string }
+                      conditions_evaluated: { type: array, items: { type: object } }
+
+  /{tenantId}/exams/{examId}/statistics:
+    get:
+      tags: [Exams]
+      summary: Get class statistics for an exam (config-driven aggregation)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: examId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Statistics computed by tenant's aggregation rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      total_students: { type: integer }
+                      average: { type: number }
+                      median: { type: number }
+                      pass_rate: { type: number }
+                      distribution: { type: object }

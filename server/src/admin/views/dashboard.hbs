@@ -1,0 +1,63 @@
+<h1 class="text-2xl font-bold mb-2">{{title}}</h1>
+<p class="text-gray-600 mb-6">{{message}}</p>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div class="border rounded-lg p-5 bg-white hover:shadow-md transition">
+    <div class="text-3xl mb-2">🏫</div>
+    <h3 class="font-semibold text-blue-600">Attendance Statuses</h3>
+    <p class="text-sm text-gray-500 mt-1">Define per-tenant attendance codes, colors, weights, and presence flags</p>
+    <a href="/admin/attendance-statuses" class="inline-block mt-3 text-sm text-blue-500 hover:underline">Configure →</a>
+  </div>
+  <div class="border rounded-lg p-5 bg-white hover:shadow-md transition">
+    <div class="text-3xl mb-2">📊</div>
+    <h3 class="font-semibold text-blue-600">Grading Scale</h3>
+    <p class="text-sm text-gray-500 mt-1">Set grade bands, percentage mode, GPA, or rubric-based grading</p>
+    <a href="/admin/grading-scale" class="inline-block mt-3 text-sm text-blue-500 hover:underline">Configure →</a>
+  </div>
+  <div class="border rounded-lg p-5 bg-white hover:shadow-md transition">
+    <div class="text-3xl mb-2">📅</div>
+    <h3 class="font-semibold text-blue-600">Academic Calendar</h3>
+    <p class="text-sm text-gray-500 mt-1">Create academic years, semesters, trimesters, or quarters</p>
+    <a href="/admin/academic-calendar" class="inline-block mt-3 text-sm text-blue-500 hover:underline">Configure →</a>
+  </div>
+  <div class="border rounded-lg p-5 bg-white hover:shadow-md transition">
+    <div class="text-3xl mb-2">🔄</div>
+    <h3 class="font-semibold text-blue-600">Workflows</h3>
+    <p class="text-sm text-gray-500 mt-1">View approval chains for leave, corrections, and admissions</p>
+    <a href="/admin/workflows" class="inline-block mt-3 text-sm text-blue-500 hover:underline">View →</a>
+  </div>
+  <div class="border rounded-lg p-5 bg-white hover:shadow-md transition">
+    <div class="text-3xl mb-2">📐</div>
+    <h3 class="font-semibold text-blue-600">Rule Sets</h3>
+    <p class="text-sm text-gray-500 mt-1">View grade calculation, attendance aggregation, and promotion rules</p>
+    <a href="/admin/rules" class="inline-block mt-3 text-sm text-blue-500 hover:underline">View →</a>
+  </div>
+  <div class="border rounded-lg p-5 bg-white hover:shadow-md transition">
+    <div class="text-3xl mb-2">🌱</div>
+    <h3 class="font-semibold text-blue-600">Seed Templates</h3>
+    <p class="text-sm text-gray-500 mt-1">Load pre-built CBSE, ICSE, or International config templates</p>
+    <a href="/admin/seed" class="inline-block mt-3 text-sm text-blue-500 hover:underline">Load →</a>
+  </div>
+</div>
+
+<div class="bg-white shadow rounded-lg p-6 mt-6">
+  <h2 class="text-lg font-semibold mb-4">API Status</h2>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <div class="p-3 bg-green-50 rounded border border-green-200">
+      <div class="font-medium text-green-800">Config Engine</div>
+      <div class="text-green-600">15 endpoints</div>
+    </div>
+    <div class="p-3 bg-green-50 rounded border border-green-200">
+      <div class="font-medium text-green-800">Rules Engine</div>
+      <div class="text-green-600">9 endpoints</div>
+    </div>
+    <div class="p-3 bg-green-50 rounded border border-green-200">
+      <div class="font-medium text-green-800">Workflow Engine</div>
+      <div class="text-green-600">6 endpoints</div>
+    </div>
+    <div class="p-3 bg-green-50 rounded border border-green-200">
+      <div class="font-medium text-green-800">EventBus</div>
+      <div class="text-green-600">13 events</div>
+    </div>
+  </div>
+</div>

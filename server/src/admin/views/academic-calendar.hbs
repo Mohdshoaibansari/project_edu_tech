@@ -1,0 +1,80 @@
+<h1 class="text-2xl font-bold mb-6">{{title}}</h1>
+<p class="text-gray-600 mb-6">Manage academic years and their terms (semesters, trimesters, quarters, or custom).</p>
+
+<!-- Academic Years -->
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+  <h2 class="text-lg font-semibold mb-4">Academic Years</h2>
+
+  {{#each years}}
+  <div class="border rounded-lg p-4 mb-4">
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="font-semibold text-lg">{{name}}</h3>
+      <span class="text-sm text-gray-500">
+        {{start_date}} → {{end_date}}
+        {{#if is_active}}<span class="status-badge bg-green-100 text-green-800 ml-2">Active</span>{{/if}}
+      </span>
+    </div>
+
+    {{#if terms.length}}
+    <table class="w-full text-sm mt-2">
+      <thead>
+        <tr class="border-b text-left text-gray-500">
+          <th class="py-1 px-2">Code</th>
+          <th class="py-1 px-2">Name</th>
+          <th class="py-1 px-2">Type</th>
+          <th class="py-1 px-2">Start</th>
+          <th class="py-1 px-2">End</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each terms}}
+        <tr class="border-b">
+          <td class="py-1 px-2 font-semibold">{{code}}</td>
+          <td class="py-1 px-2">{{name}}</td>
+          <td class="py-1 px-2"><span class="status-badge bg-purple-100 text-purple-800">{{term_type}}</span></td>
+          <td class="py-1 px-2">{{start_date}}</td>
+          <td class="py-1 px-2">{{end_date}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="text-sm text-gray-400">No terms defined</p>
+    {{/if}}
+
+    <!-- Add Term Form -->
+    <form method="POST" action="/admin/academic-calendar/term?tenant_id={{../../activeTenantId}}" class="mt-3 grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+      <input type="hidden" name="year_id" value="{{id}}">
+      <input type="text" name="code" placeholder="SEM1" required class="border rounded px-2 py-1">
+      <input type="text" name="name" placeholder="Semester 1" required class="border rounded px-2 py-1">
+      <select name="term_type" class="border rounded px-2 py-1">
+        <option value="semester">Semester</option>
+        <option value="trimester">Trimester</option>
+        <option value="quarter">Quarter</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input type="date" name="start_date" required class="border rounded px-2 py-1">
+      <input type="date" name="end_date" required class="border rounded px-2 py-1">
+      <input type="hidden" name="sort_order" value="99">
+      <button type="submit" class="bg-gray-600 text-white rounded px-3 py-1 hover:bg-gray-700">Add Term</button>
+    </form>
+  </div>
+  {{/each}}
+
+  {{#unless years.length}}
+  <p class="text-gray-400 text-center py-6">No academic years defined yet.</p>
+  {{/unless}}
+</div>
+
+<!-- Add Year -->
+<div class="bg-white shadow rounded-lg p-6">
+  <h2 class="text-lg font-semibold mb-4">Add Academic Year</h2>
+  <form method="POST" action="/admin/academic-calendar/year?tenant_id={{activeTenantId}}" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+    <input type="text" name="name" placeholder="2026-2027" required class="border rounded px-3 py-1.5">
+    <input type="date" name="start_date" required class="border rounded px-3 py-1.5">
+    <input type="date" name="end_date" required class="border rounded px-3 py-1.5">
+    <button type="submit" class="bg-blue-600 text-white rounded px-6 py-1.5 hover:bg-blue-700">
+      Create Year
+    </button>
+  </form>
+</div>
