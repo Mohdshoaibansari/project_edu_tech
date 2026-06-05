@@ -88,14 +88,16 @@ These engines are built **before** any business modules (Phase 0) and all module
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                           │                             │
 │                          ┌────────────────▼────────────────────┐       │
-│                          │        Data Layer                    │       │
+│                          │        Backend Infrastructure        │       │
 │                          │  ┌────────────┐  ┌───────────────┐  │       │
 │                          │  │ Prisma ORM │  │ File Storage  │  │       │
-│                          │  │ PostgreSQL │  │ S3 / MinIO    │  │       │
-│                          │  └────────────┘  └───────────────┘  │       │
+│                          │  │ (connects  │  │ via signed    │  │       │
+│                          │  │ to external│  │ URLs / S3 SDK │  │       │
+│                          │  │ PostgreSQL)│  └───────────────┘  │       │
+│                          │  └────────────┘                     │       │
 │                          │  ┌────────────┐  ┌───────────────┐  │       │
-│                          │  │ Redis      │  │ Message Queue │  │       │
-│                          │  │ (Cache)    │  │ (BullMQ/Rab)  │  │       │
+│                          │  │ BullMQ     │  │ AI Module     │  │       │
+│                          │  │ Job Queue  │  │ (OpenAI/Anth) │  │       │
 │                          │  └────────────┘  └───────────────┘  │       │
 │                          └─────────────────────────────────────┘       │
 └───────────────────────────────────────────────────────────────────────────┘
@@ -132,14 +134,14 @@ These engines are built **before** any business modules (Phase 0) and all module
 | Authentication | ✅ JWT issuance & verification | Stores token, attaches to requests |
 | Authorization | ✅ Permission checks, RBAC guard | Hides UI elements (UX only) |
 | Business Logic | ✅ All rules, workflows, validations | — |
-| Data Persistence | ✅ Prisma → PostgreSQL | — |
+| Data Persistence | ✅ Prisma → PostgreSQL (external) | — |
 | Data Validation | ✅ Zod schemas on input | Client-side validation (UX only) |
 | UI Rendering | — | ✅ React components |
 | Routing & Navigation | — | ✅ Next.js App Router |
 | Branding & Theming | Stores config | ✅ Applies config |
 | Feature Flags | ✅ Evaluates rules | ✅ Conditional rendering |
 | Offline Queue | — | ✅ IndexedDB queue |
-| Caching | ✅ Redis | TanStack Query cache |
+| Caching | ✅ Redis (optional, external) | TanStack Query cache |
 | File Storage | ✅ S3/MinIO, signed URLs | Uploads via signed URLs |
 
 ---
@@ -148,7 +150,7 @@ These engines are built **before** any business modules (Phase 0) and all module
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          INFRASTRUCTURE                                   │
+│                          PROJECT INFRASTRUCTURE                           │
 │                                                                           │
 │  ┌──────────────────────────────────────────────────────────────┐        │
 │  │                    CDN / Edge (Cloudflare)                     │        │
@@ -175,32 +177,42 @@ These engines are built **before** any business modules (Phase 0) and all module
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐           │       │
 │  │  │ Instance 1  │  │ Instance 2  │  │ Instance N  │           │       │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘           │       │
-│  └────────────────────────┬──────────────────────────────────────┘       │
-│                           │                                               │
-│  ┌────────────────────────▼──────────────────────────────────────┐       │
-│  │                      Data Layer                                 │       │
-│  │  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐       │       │
-│  │  │ PostgreSQL   │  │ Redis      │  │ S3 / MinIO       │       │       │
-│  │  │ (RDS)       │  │ (ElastiCache)│  │ (Object Storage) │       │       │
-│  │  └──────────────┘  └────────────┘  └──────────────────┘       │       │
 │  └───────────────────────────────────────────────────────────────┘       │
 │                                                                           │
 │  ┌──────────────────────────────────────────────────────────────┐        │
-│  │               AI Service (ECS / App Runner)                    │        │
+│  │               AI Chat Service (ECS / App Runner)               │        │
 │  │  ┌─────────────────────────────────────────────┐              │        │
 │  │  │ FastAPI + LangGraph + Telegram Bot Webhook   │              │        │
 │  │  └─────────────────────────────────────────────┘              │        │
 │  └──────────────────────────────────────────────────────────────┘        │
 │                                                                           │
-│  ┌──────────────────────────────────────────────────────────────┐        │
-│  │               Auth Service (ECS / Docker)                      │        │
-│  │  ┌──────────────┐  ┌────────────────────┐                      │        │
-│  │  │ PostgreSQL   │  │ SuperTokens Core   │                      │        │
-│  │  │ (Auth DB)   │  │ + Auth Service     │                      │        │
-│  │  └──────────────┘  └────────────────────┘                      │        │
-│  └──────────────────────────────────────────────────────────────┘        │
-└─────────────────────────────────────────────────────────────────────────┘
+│  ════════════════════════════════════════════════════════════════        │
+│  EXTERNAL SERVICES (managed outside this project)                         │
+│  ════════════════════════════════════════════════════════════════        │
+│                                                                           │
+│  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐                  │
+│  │ PostgreSQL   │  │ Redis      │  │ SuperTokens      │                  │
+│  │ (RDS/managed)│  │ (ElastiCache│  │ (Identity/Auth)  │                  │
+│  │              │  │ — optional)│  │                  │                  │
+│  └──────┬───────┘  └─────┬──────┘  └────────┬─────────┘                  │
+│         │                │                   │                             │
+│         │   DATABASE_URL │ REDIS_URL         │ SUPERTOKENS_CONNECTION_URI  │
+│         │                │ (optional)        │ SUPERTOKENS_API_KEY         │
+│         └────────────────┼───────────────────┘                             │
+│                          │                                                 │
+│              Backend connects via env vars                                 │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
+
+### External Services
+
+PostgreSQL, Redis, and SuperTokens are **externally managed services**. The backend connects to them via environment variables. They are NOT built, deployed, or provisioned as part of this project.
+
+| Service | Required | Env Var(s) | Notes |
+|---------|:--------:|------------|-------|
+| **PostgreSQL** | ✅ Yes | `DATABASE_URL` | Schema managed via Prisma migrations; server managed externally |
+| **Redis** | ❌ Optional | `REDIS_URL` | Backend uses in-process EventEmitter by default; degrades gracefully if unavailable |
+| **SuperTokens** | ✅ Yes | `SUPERTOKENS_CONNECTION_URI`, `SUPERTOKENS_API_KEY` | Identity provider; project integrates via JWT token exchange (see [06-auth-spec.md](./06-auth-spec.md)) |
 
 ---
 
@@ -221,6 +233,7 @@ These engines are built **before** any business modules (Phase 0) and all module
 | **Backend AI Module** (homework gen, auto-grading, report summaries — in-backend) | [`04-backend-spec.md` §4.12](./04-backend-spec.md) |
 | **AI Chat Service** (conversational chatbot — separate repo) | [`ai_chat` repo](../../../ai_chat/) |
 | **Engine Designs (Configuration, Rules, Workflow, Metadata, Template)** | [`12`](./12-configuration-engine.md) — [`16`](./16-template-engine.md) |
+| **External Services** (PostgreSQL, Redis, SuperTokens — connection config) | This document (§Deployment Topology — External Services) |
 | **Deployment & Infrastructure** | This document (§Deployment Topology) |
 
 ---

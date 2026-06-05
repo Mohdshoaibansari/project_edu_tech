@@ -24,7 +24,7 @@ Phase 0: Backend Engine Foundation + Admin UI (Weeks 1-4) ⭐ BUILD FIRST
     ├── Configuration Engine (hierarchical JSON Schema config)
     ├── Rules Engine (JSON condition/action evaluation)
     ├── Workflow Engine (configurable state machines)
-    ├── Event Bus (in-process, Redis later)
+    ├── Event Bus (in-process; optional Redis pub/sub for multi-instance deployment)
     ├── Academic Calendar tables
     ├── Metadata JSONB columns on all entities
     ├── Engine API endpoints (Config, Rules, Workflow)
@@ -68,7 +68,7 @@ Phase 3: Advanced Engines + AI (Weeks 17-22)
 Phase 4: Enterprise + Scale (Weeks 23-28)
     │
     ├── Tier 2-4 multi-tenant routing (separate schemas, dedicated DB, dedicated instances)
-    ├── Redis caching, query optimization, connection pooling
+    ├── Query optimization; optional Redis caching for performance
     ├── Prometheus + Grafana + Sentry
     ├── Audit & compliance UI
     ├── CI/CD per client
@@ -87,7 +87,7 @@ Phase 4: Enterprise + Scale (Weeks 23-28)
 | Task | Priority | Effort | Depends On |
 |------|----------|--------|------------|
 | Initialize NestJS project (TypeScript strict, Vitest, ESLint, Prettier) | P0 | 1d | — |
-| Set up Docker Compose (PostgreSQL 16 + Redis 7 + SuperTokens) | P0 | 1d | — |
+| Configure external service connections (DATABASE_URL, SUPERTOKENS_CONNECTION_URI, REDIS_URL via env vars) | P0 | 0.5d | — |
 | Configure NestJS MVC (Handlebars templating for admin UI) | P0 | 0.5d | NestJS init |
 | Create Prisma schema — **NO business enums** — use reference data tables | P0 | 2d | — |
 | Create `attendance_statuses`, `assessment_types`, `leave_types`, `notification_type_defs`, `homework_categories` reference data tables | P0 | 1d | Schema |
@@ -162,7 +162,7 @@ Phase 4: Enterprise + Scale (Weeks 23-28)
 
 | Task | Priority | Effort | Depends On |
 |------|----------|--------|------------|
-| SuperTokens Docker setup + Auth Service | P0 | 1d | Phase 0 Docker |
+| Configure SuperTokens connection (SUPERTOKENS_CONNECTION_URI + SUPERTOKENS_API_KEY env vars) + JWT token service | P0 | 0.5d | — |
 | JWT token service (issue, verify, refresh, rotate) | P0 | 1d | — |
 | Auth controller (login, logout, refresh, me) with OpenAPI spec | P0 | 1d | JWT |
 | Tenant context middleware (AsyncLocalStorage) | P0 | 1d | — |
@@ -339,18 +339,18 @@ Phase 4: Enterprise + Scale (Weeks 23-28)
 
 | Task | Priority | Effort | Depends On |
 |------|----------|--------|------------|
-| **Reporting read replica** — provision PostgreSQL read replica, route all `/api/v1/{tenant}/reports/*` queries to replica | P2 | 2d | — |
+| **[Infra team]** Reporting read replica — route all `/api/v1/{tenant}/reports/*` queries to replica | P2 | — | — |
 | **Reporting materialized views** — pre-aggregated attendance rates, exam stats, grade distributions refreshed hourly | P2 | 2d | Read replica |
-| **Analytics DB** — dedicated analytics database with materialized views and pre-aggregated cubes (if read replica insufficient) | P2 | 3d | Read replica |
-| **PostgreSQL FTS upgrade** — add `tsvector` columns, GIN indexes, search triggers to all searchable entities | P2 | 2d | — |
+| **[Infra team]** Analytics DB — dedicated analytics database with materialized views and pre-aggregated cubes (if read replica insufficient) | P2 | — | Read replica |
+| **PostgreSQL FTS upgrade** — add `tsvector` columns, GIN indexes, search triggers to all searchable entities (applied via Prisma migration against externally managed PostgreSQL) | P2 | 2d | — |
 | **OpenSearch evaluation** — assess if PostgreSQL FTS thresholds exceeded (500ms p95, 50+ req/s, multi-language stemming needed) | P2 | 1d | FTS upgrade |
-| **OpenSearch integration** (if needed) — provision cluster, index sync pipeline, API migration | P2 | 4d | Evaluation |
+| **[Infra team]** OpenSearch integration (if needed) — provision cluster, index sync pipeline, API migration | P2 | — | Evaluation |
 | Tier 2: Shared DB + separate schema routing | P2 | 2d | Multi-tenant manager |
-| Tier 3: Dedicated database provisioning + connection routing | P2 | 3d | Multi-tenant manager |
+| **[Infra team]** Tier 3: Dedicated database provisioning + connection routing | P2 | — | Multi-tenant manager |
 | Tier 4: Dedicated instance infrastructure (separate ECS/EKS deployment) | P2 | 3d | Tier 3 |
-| Redis caching layer — config cache, permission cache, query result cache | P2 | 2d | — |
+| **Redis caching (optional)** — config cache, permission cache, query result cache (requires externally managed Redis; backend degrades gracefully if unavailable) | P2 | 2d | — |
 | Query optimization — slow query analysis, index tuning, N+1 elimination | P2 | 2d | All modules |
-| Connection pooling (PgBouncer) for Tier 1 multi-tenant | P2 | 1d | — |
+| **[Infra team]** Connection pooling (PgBouncer) for Tier 1 multi-tenant | P2 | — | — |
 | Prometheus metrics + Grafana dashboards (API latency, error rates, queue depth, DB connections) | P2 | 2d | — |
 | Sentry error tracking — backend + frontend with source maps | P2 | 1d | — |
 | Full audit trail UI — search, filter, export audit logs | P2 | 2d | Audit logging |

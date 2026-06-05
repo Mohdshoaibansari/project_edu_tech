@@ -11,20 +11,20 @@
 
 ## 4.1 Technology Stack
 
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| Runtime | Node.js | 20 LTS |
-| Framework | NestJS | 10.x |
-| Language | TypeScript | 5.x (strict) |
-| ORM | Prisma | 5.x |
-| Database | PostgreSQL | 16 |
-| Cache | Redis | 7.x |
-| Queue | BullMQ | 5.x |
-| Validation | Zod | 3.x |
-| Auth | jose (JWT) | 5.x |
-| File Storage | @aws-sdk/client-s3 | 3.x |
-| Templates | Handlebars + Puppeteer | Latest |
-| Testing | Vitest + Supertest | Latest |
+| Component | Technology | Version | Notes |
+|-----------|-----------|---------|-------|
+| Runtime | Node.js | 20 LTS | |
+| Framework | NestJS | 10.x | |
+| Language | TypeScript | 5.x (strict) | |
+| ORM | Prisma | 5.x | |
+| Database | PostgreSQL | 16 | Externally managed — connected via `DATABASE_URL`. Schema owned by project (Prisma migrations) |
+| Cache | Redis | 7.x | Externally managed, **optional**. Connected via `REDIS_URL`. Backend degrades gracefully if unavailable |
+| Queue | BullMQ | 5.x | |
+| Validation | Zod | 3.x | |
+| Auth | jose (JWT) | 5.x | SuperTokens externally managed — connected via `SUPERTOKENS_CONNECTION_URI` |
+| File Storage | @aws-sdk/client-s3 | 3.x | |
+| Templates | Handlebars + Puppeteer | Latest | |
+| Testing | Vitest + Supertest | Latest | |
 
 ---
 
@@ -41,7 +41,7 @@
 | **Contexts communicate via Event Bus** | No direct service imports between contexts. `AttendanceContext` emits `AttendanceMarked` event → `CommunicationContext` listens and sends notification |
 | **Shared Kernel is minimal** | Only branded ID types (`TenantId`, `UserId`, `StudentId`), error classes, event definitions, DB client |
 | **Configuration Context is a dependency** | Business contexts depend ON Configuration (to load per-tenant settings), not the reverse |
-| **Anti-Corruption Layer** | SuperTokens adapter (Identity Context), external notification providers (Communication Context) |
+| **Anti-Corruption Layer** | SuperTokens adapter (external Identity Context), external notification providers (Communication Context) |
 
 ### Backend Module Standards
 
@@ -729,8 +729,8 @@ The API standards (PRD §1.5a) define a `search` query parameter for basic full-
 
 | Phase | Approach | Scope | Rationale |
 |-------|----------|-------|-----------|
-| **Phase 1-2** (MVP—50 tenants) | **PostgreSQL Full Text Search (FTS)** | Per-module search: students, teachers, homework | Zero operational overhead. Built into PostgreSQL. No additional infrastructure |
-| **Phase 3** (50-200 tenants) | **PostgreSQL FTS + GIN indexes + `tsvector` columns** | Global unified search across modules | Materialized `tsvector` columns for performance. Still no external dependency |
+| **Phase 1-2** (MVP—50 tenants) | **PostgreSQL Full Text Search (FTS)** | Per-module search: students, teachers, homework | Zero operational overhead. Uses externally managed PostgreSQL's built-in FTS. No additional infrastructure |
+| **Phase 3** (50-200 tenants) | **PostgreSQL FTS + GIN indexes + `tsvector` columns** | Global unified search across modules | Schema changes applied via Prisma migrations against externally managed PostgreSQL. Still no additional infrastructure |
 | **Phase 4** (200+ tenants) | **OpenSearch** (only when needed) | Relevance-ranked search, faceted filtering, multi-language stemming | Introduced ONLY when PostgreSQL FTS proves insufficient for scale or relevance requirements |
 
 ### Phase 1 Implementation: PostgreSQL FTS
