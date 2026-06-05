@@ -1,11 +1,35 @@
 # 3. System Architecture
 
-> **Status:** Draft — Pre-Implementation  
-> **Last Updated:** 2026-06-05
+> **Spec ID:** ARCH-001  
+> **Status:** Approved  
+> **Author:** Architecture & Engineering Team  
+> **Created:** 2026-06-05  
+> **Last Updated:** 2026-06-05  
+> **Related PRD Requirements:** All — this is the top-level architecture document
 
 ---
 
-## 3.1 High-Level Architecture
+## Summary
+
+High-level system architecture for the EduTech multi-tenant SaaS platform. Three tiers: per-client Next.js frontends, a shared NestJS backend with an engine layer and AI module, and a separate AI Chat Service for conversational interactions. All tiers are tenant-aware and communicate via REST APIs with JWT or x-api-key authentication.
+
+### Architecture Philosophy: Engine-First
+
+EduTech serves **radically different schools** from a single backend without code changes. This is achieved through an **engine layer** that sits between business contexts and the database:
+
+| Engine | Problem Solved | Without It |
+|--------|---------------|------------|
+| **Configuration Engine** | Each school defines its own attendance statuses, grading scales, academic calendars | Hardcoded Prisma enums shared by all tenants |
+| **Rules Engine** | Grade calculation, attendance aggregation, promotion eligibility vary per school | Hardcoded `if/else` in service methods |
+| **Workflow Engine** | Leave approvals, corrections, admissions follow different chains per school | Hardcoded state transitions |
+| **Metadata Engine** | Schools need custom fields without schema migrations | `ALTER TABLE` per new tenant field |
+| **Template Engine** | Report cards, certificates, letters differ per school | No document generation at all |
+
+These engines are built **before** any business modules (Phase 0) and all modules consume them. The result: onboarding a new school with unique requirements is a **configuration change**, not a code change.
+
+---
+
+## High-Level Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -52,6 +76,17 @@
 │  │  └──────────┘                         │                          │  │
 │  └───────────────────────────────────────┼──────────────────────────┘  │
 │                                           │                             │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                    AI MODULE (In-Backend)                          │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐│ │
+│  │  │ Homework Gen │  │ Auto-Grading │  │ Report Summaries        ││ │
+│  │  │ (teacher     │  │ (evaluate    │  │ (parent digests,        ││ │
+│  │  │  triggers)   │  │  submissions)│  │  report card comments)  ││ │
+│  │  └──────────────┘  └──────────────┘  └──────────────────────────┘│ │
+│  │  Uses AI Provider abstraction (OpenAI/Anthropic/Google/Local)     │ │
+│  │  Runs as async BullMQ jobs — never blocks API handlers            │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                           │                             │
 │                          ┌────────────────▼────────────────────┐       │
 │                          │        Data Layer                    │       │
 │                          │  ┌────────────┐  ┌───────────────┐  │       │
@@ -65,32 +100,20 @@
 │                          └─────────────────────────────────────┘       │
 └───────────────────────────────────────────────────────────────────────────┘
             │
-            │  Internal API (x-api-key auth)
+            │  Internal API (x-api-key)
             ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                   PYTHON AI SERVICE (Shared — Tenant-Aware)                 │
+│                   AI CHAT SERVICE (Separate Repository)                    │
+│                   See: `ai_chat/` repo for full specification              │
 │                                                                            │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────────────────┐  │
-│  │ Telegram Bot │──▶│ FastAPI      │──▶│ LangGraph Agent              │  │
-│  │ Webhook      │   │ Endpoints    │   │ - Intent Classification      │  │
-│  └──────────────┘   └──────────────┘   │ - Attendance Queries         │  │
-│                                        │ - Leave Application Flow     │  │
-│                                        │ - Homework Queries           │  │
-│                                        └──────────────┬───────────────┘  │
-│                                                       │                   │
-│                                          ┌────────────▼───────────────┐  │
-│                                          │ Next.js Internal API Client │  │
-│                                          │ (HTTP + x-api-key)          │  │
-│                                          └────────────────────────────┘  │
-│                                                                            │
-│  ⚠️ RULE: Python AI service NEVER directly accesses PostgreSQL.            │
-│  ALL data flows through the Backend API.                                   │
+│  FastAPI + LangGraph + Telegram/WhatsApp/WebChat                           │
+│  Consumes edu_tech backend REST APIs — NEVER accesses database directly    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3.2 Backend-Frontend Separation
+## Backend-Frontend Separation
 
 ### Principles
 
@@ -121,271 +144,7 @@
 
 ---
 
-## 3.3 Auth Flow
-
-```
-┌──────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  USER    │     │  FRONTEND    │     │  BACKEND API │     │ SUPERTOKENS  │
-│ (Browser)│     │  (Next.js)   │     │  (Node.js)   │     │ (Docker)     │
-└────┬─────┘     └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
-     │                  │                    │                    │
-     │  1. Login Page   │                    │                    │
-     │─────────────────▶│                    │                    │
-     │                  │                    │                    │
-     │                  │  2. POST /auth/signin (email, password)│
-     │                  │───────────────────────────────────────▶│
-     │                  │                    │                    │
-     │                  │  3. Verify + Session Token             │
-     │                  │◀───────────────────────────────────────│
-     │                  │                    │                    │
-     │                  │  4. POST /api/v1/auth/login            │
-     │                  │  (email, supertokens_session_id)       │
-     │                  │───────────────────▶│                    │
-     │                  │                    │                    │
-     │                  │                    │ 5. Lookup user in  │
-     │                  │                    │    Prisma by email │
-     │                  │                    │                    │
-     │                  │  6. Access Token   │                    │
-     │                  │  (JWT: userId,     │                    │
-     │                  │   tenant_id, role, │                    │
-     │                  │   permissions)     │                    │
-     │                  │◀───────────────────│                    │
-     │                  │                    │                    │
-     │                  │  7. Refresh Token  │                    │
-     │                  │  (HttpOnly Cookie) │                    │
-     │                  │                    │                    │
-     │  8. Redirect to  │                    │                    │
-     │     Dashboard    │                    │                    │
-     │◀─────────────────│                    │                    │
-     │                  │                    │                    │
-     │  ─── Subsequent Requests ───          │                    │
-     │                  │                    │                    │
-     │                  │  9. API Call +     │                    │
-     │                  │  Authorization:    │                    │
-     │                  │  Bearer <jwt>      │                    │
-     │                  │───────────────────▶│                    │
-     │                  │                    │                    │
-     │                  │                    │ 10. Verify JWT     │
-     │                  │                    │     Check permission│
-     │                  │                    │     Check tenant   │
-     │                  │                    │                    │
-     │                  │  11. Response      │                    │
-     │                  │◀───────────────────│                    │
-```
-
-### Token Design
-
-| Token | Storage | Lifetime | Rotation | Contents |
-|-------|---------|----------|----------|----------|
-| **Access Token (JWT)** | In-memory (JS variable) | 15 minutes | Auto-refresh | `sub`, `tenant`, `role`, `permissions[]`, `exp`, `iat` |
-| **Refresh Token** | HttpOnly Secure Cookie | 30 days | Rotate on use | Opaque token, server-validated |
-
-### JWT Claims (Minimal)
-
-```json
-{
-  "sub": "user-uuid",
-  "tenant": "tenant-uuid",
-  "role": "TEACHER",
-  "permissions": ["attendance:mark", "homework:create", "homework:grade"],
-  "iat": 1717620000,
-  "exp": 1717620900
-}
-```
-
----
-
-## 3.4 Multi-Tenant Data Flow
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     INCOMING REQUEST                          │
-│  GET /api/v1/attendance?class_id=xxx                         │
-│  Headers: Authorization: Bearer <jwt>                        │
-└──────────────────────────┬───────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  1. AUTH MIDDLEWARE                                          │
-│     - Verify JWT signature                                   │
-│     - Extract tenant_id from JWT claim                       │
-│     - Extract user_id, role, permissions from JWT            │
-│     - Attach to request context                              │
-└──────────────────────────┬───────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  2. TENANT CONTEXT RESOLVER                                  │
-│     - Validate tenant_id exists and is active                │
-│     - Set tenant context on AsyncLocalStorage                │
-│     - Load tenant config into cache (if not cached)          │
-└──────────────────────────┬───────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  3. PERMISSION GUARD                                         │
-│     - Check requiredPermission('attendance:view')            │
-│     - Check resource scope (requireClassAccess)              │
-│     - If PRINCIPAL/TEACHER → verify class belongs to tenant  │
-│     - If PARENT → verify student is parent's child           │
-└──────────────────────────┬───────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  4. SERVICE LAYER                                            │
-│     - Execute business logic                                 │
-│     - Pass tenant_id to all repository calls                 │
-└──────────────────────────┬───────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  5. REPOSITORY LAYER                                         │
-│     - ALL queries include: WHERE tenant_id = $tenant_id      │
-│     - PostgreSQL RLS enforces as defense-in-depth            │
-│     - Return data (already tenant-scoped)                    │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 3.5 Domain Module Structure
-
-### Backend (`server/`) — Bounded Contexts + Engine Layer
-
-```
-server/
-├── src/
-│   ├── contexts/                        # Bounded contexts (DDD)
-│   │   ├── identity/                    # Users, roles, auth, sessions
-│   │   │   ├── domain/
-│   │   │   ├── application/
-│   │   │   ├── infrastructure/
-│   │   │   └── interfaces/
-│   │   ├── academic-structure/          # Tenants, grades, sections, subjects, classes, calendar
-│   │   ├── attendance/                  # Attendance CRUD, status validation, rate calculation
-│   │   ├── assessment/                  # Homework, exams, grading, rubrics, submissions
-│   │   ├── leave/                       # Leave requests, workflow integration
-│   │   ├── communication/               # Notifications, chatbot, messaging
-│   │   │
-│   │   ├── configuration/               # ⭐ ENGINE LAYER (Cross-cutting)
-│   │   │   ├── config-engine/           # Hierarchical JSON Schema configuration
-│   │   │   ├── rules-engine/            # JSON condition/action evaluation
-│   │   │   ├── workflow-engine/         # Configurable state machines
-│   │   │   ├── metadata-engine/         # Custom fields without schema changes
-│   │   │   └── template-engine/         # Document generation (Handlebars + PDF)
-│   │   │
-│   │   └── reporting/                   # Reports, analytics, dashboards, exports
-│   │
-│   ├── shared-kernel/                    # Branded types, errors, event bus, DB client
-│   │   ├── types/                        # TenantId, UserId, StudentId branded types
-│   │   ├── errors/                       # NotFoundError, ForbiddenError, ValidationError
-│   │   ├── events/                       # Domain event definitions + EventBus
-│   │   └── database/                     # Prisma client, transaction helper
-│   │
-│   ├── providers/                       # External integrations
-│   │   ├── auth/                        # SuperTokens adapter
-│   │   ├── ai/                          # AI provider abstraction + implementations
-│   │   ├── notifications/               # Email, SMS, Push providers
-│   │   └── storage/                     # S3/MinIO file storage
-│   │
-│   └── main.ts                          # Application entry point
-│
-├── prisma/
-│   ├── schema.prisma                    # Zero business enums — reference data tables instead
-│   ├── migrations/
-│   └── seed.ts                          # 3 diverse school configs
-│
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── config-variability/              # ⭐ Tests with 3+ school configs
-│
-├── package.json
-└── tsconfig.json
-```
-│   └── main.ts                    # Application entry point
-│
-├── prisma/
-│   ├── schema.prisma
-│   ├── migrations/
-│   └── seed.ts
-│
-├── tests/
-│   ├── integration/
-│   └── e2e/
-│
-├── package.json
-└── tsconfig.json
-```
-
-### Frontend (`client/`)
-
-```
-client/
-├── src/
-│   ├── app/                        # Next.js App Router entry
-│   │   ├── layout.tsx              # Root layout + providers
-│   │   ├── page.tsx                # Landing / redirect
-│   │   └── [tenant]/               # Tenant-scoped routes
-│   │       └── (dashboard)/
-│   │           ├── layout.tsx      # Dashboard layout (sidebar + header)
-│   │           ├── attendance/
-│   │           ├── homework/
-│   │           ├── exams/
-│   │           ├── reports/
-│   │           └── admin/
-│   │
-│   ├── modules/                    # Feature modules (domain)
-│   │   ├── attendance/
-│   │   │   ├── pages/
-│   │   │   ├── components/
-│   │   │   ├── hooks/
-│   │   │   ├── services/
-│   │   │   ├── types/
-│   │   │   └── tests/
-│   │   ├── homework/
-│   │   ├── exams/
-│   │   ├── reports/
-│   │   └── admin/
-│   │
-│   ├── shared/                     # Cross-cutting shared code
-│   │   ├── api/                    # Generated API client + hooks
-│   │   ├── components/             # Design system (shadcn/ui)
-│   │   ├── forms/                  # Form framework
-│   │   ├── tables/                 # Table framework
-│   │   ├── layouts/                # Layout components
-│   │   ├── hooks/                  # Shared hooks
-│   │   └── utils/                  # Utilities
-│   │
-│   ├── services/                   # Cross-cutting services
-│   │   ├── auth.service.ts
-│   │   ├── tenant-config.service.ts
-│   │   └── feature-flags.service.ts
-│   │
-│   ├── store/                      # Zustand stores (UI state only)
-│   ├── types/                      # Shared TypeScript types
-│   ├── config/                     # Client configuration
-│   └── lib/                        # Utility functions
-│
-├── public/
-│   └── tenants/                    # Per-tenant static assets
-│       └── [tenant-slug]/
-│           ├── logo.svg
-│           └── favicon.ico
-│
-├── tests/
-│   ├── unit/
-│   └── e2e/
-│
-├── next.config.js
-├── tailwind.config.ts
-├── tsconfig.json
-└── package.json
-```
-
----
-
-## 3.6 Deployment Topology
+## Deployment Topology
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -445,30 +204,25 @@ client/
 
 ---
 
-## 3.7 Technology Stack Decision
+## Cross-References
 
-| Layer | Technology | Rationale |
-|-------|-----------|-----------|
-| **Backend Framework** | NestJS (or Express + TypeScript) | Modular, opinionated, enterprise-ready, decorator-based |
-| **Backend Language** | TypeScript 5 (strict) | Type safety, shared types with frontend |
-| **ORM** | Prisma 5 | Type-safe, migration tooling, multi-tenant friendly |
-| **Database** | PostgreSQL 16 | Robust, RLS support, JSONB for config |
-| **Cache** | Redis 7 | Session store, rate limit counter, config cache |
-| **Queue** | BullMQ (Redis-backed) | Notifications, file processing, AI jobs |
-| **File Storage** | S3 / MinIO | Scalable, signed URL support |
-| **Frontend Framework** | Next.js 14 (App Router) | SSR/SSG, routing, image optimization |
-| **UI Library** | shadcn/ui + Tailwind CSS | Customizable, accessible, theme-friendly |
-| **State (Server)** | TanStack Query (React Query) | Cache, refetch, mutation management |
-| **State (UI)** | Zustand | Lightweight, simple API |
-| **Forms** | React Hook Form + Zod | Performant, type-safe validation |
-| **API Client** | OpenAPI Generator → TypeScript SDK | Contract-driven, type-safe |
-| **AI Service** | FastAPI + LangGraph + LangChain | Python AI ecosystem, graph-based agents |
-| **Chatbot** | python-telegram-bot | Telegram Bot API wrapper |
-| **Auth** | SuperTokens (Docker) + JWT | Centralized identity, token exchange pattern |
-| **API Docs** | Swagger UI / Scalar (from OpenAPI) | Auto-generated from contracts |
-| **Monitoring** | Prometheus + Grafana + Sentry | Metrics, traces, error tracking |
-| **CI/CD** | GitHub Actions | Automated test, build, deploy per client |
+| Topic | Canonical Document |
+|-------|-------------------|
+| **API Design Standards** (response format, pagination, error codes, idempotency) | [`01-prd.md` §1.5a](./01-prd.md) |
+| **Authentication Flow & Token Design** | [`06-auth-spec.md`](./06-auth-spec.md) |
+| **Multi-Tenant Data Flow & Tenant Context** | [`07-multi-tenant-spec.md`](./07-multi-tenant-spec.md) |
+| **Multi-Tenant Strategy (Tier decisions, routing)** | [`17-multi-tenant-strategy.md`](./17-multi-tenant-strategy.md) |
+| **Bounded Contexts (DDD domain boundaries)** | [`18-domain-driven-design.md`](./18-domain-driven-design.md) |
+| **Backend Implementation (module structure, stack, engines)** | [`04-backend-spec.md`](./04-backend-spec.md) |
+| **Frontend Implementation (customization, components, state)** | [`05-frontend-spec.md`](./05-frontend-spec.md) |
+| **API Endpoint Contracts (per-module)** | [`08-api-contracts.md`](./08-api-contracts.md) |
+| **Implementation Roadmap (phases, tasks, exit criteria)** | [`09-implementation-roadmap.md`](./09-implementation-roadmap.md) |
+| **Backend-Admin UI** (configuration tool — Phase 0, served from backend) | [`04-backend-spec.md` §4.10](./04-backend-spec.md) |
+| **Backend AI Module** (homework gen, auto-grading, report summaries — in-backend) | [`04-backend-spec.md` §4.12](./04-backend-spec.md) |
+| **AI Chat Service** (conversational chatbot — separate repo) | [`ai_chat` repo](../../../ai_chat/) |
+| **Engine Designs (Configuration, Rules, Workflow, Metadata, Template)** | [`12`](./12-configuration-engine.md) — [`16`](./16-template-engine.md) |
+| **Deployment & Infrastructure** | This document (§Deployment Topology) |
 
 ---
 
-> **Next:** See [`04-backend-spec.md`](./04-backend-spec.md) for detailed backend specification.
+> **Next:** See [`04-backend-spec.md`](./04-backend-spec.md) for detailed backend implementation specification.

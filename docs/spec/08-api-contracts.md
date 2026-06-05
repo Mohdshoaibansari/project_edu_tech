@@ -1,48 +1,25 @@
 # 8. API Contracts
 
-> **Status:** Draft — Pre-Implementation  
+> **Spec ID:** SPEC-API-001  
+> **Status:** Approved  
+> **Author:** Architecture & Engineering Team  
+> **Created:** 2026-06-05  
 > **Last Updated:** 2026-06-05  
-> **Note:** This is a summary reference. Full OpenAPI 3.x YAML files will be generated per module in `contracts/` directory.
+> **Related PRD Requirements:** All API endpoints
+
+## Summary
+
+Per-module API endpoint contracts for the EduTech platform. Defines all ~75 endpoints across 10 modules with method, path, auth requirements, request/response schemas, and error codes.
+
+> **API design standards** (response format, module-scoped error codes, pagination, filtering/sorting conventions, idempotency, field conventions, backward compatibility): See [`01-prd.md` §1.5a](./01-prd.md).
+>
+> Full OpenAPI 3.x YAML files are generated per module in the `contracts/` directory. This document serves as a human-readable summary reference.
 
 ---
 
-## 8.1 API Naming Convention
+## Module API Contracts
 
-### URL Structure
-
-```
-/api/v1/{tenantId}/{resource}
-/api/v1/{tenantId}/{resource}/{id}
-/api/v1/{tenantId}/{resource}/{id}/{sub-resource}
-/api/v1/{tenantId}/{resource}/{id}/{action}
-```
-
-### Standard Headers
-
-| Header | Required | Description |
-|--------|----------|-------------|
-| `Authorization: Bearer <jwt>` | Yes (except auth) | Access token |
-| `Content-Type: application/json` | Yes (POST/PUT/PATCH) | Request body format |
-| `Accept: application/json` | Optional | Response format |
-| `X-Request-ID` | Optional | For tracing |
-
-### Standard Query Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | integer | 1 | Page number |
-| `limit` | integer | 20 | Items per page (max 100) |
-| `sort` | string | `-created_at` | Sort field (`-` = descending) |
-| `filter[field]` | string | — | Exact match filter |
-| `search` | string | — | Full-text search term |
-| `from` | date | — | Date range start |
-| `to` | date | — | Date range end |
-
----
-
-## 8.2 Module API Contracts
-
-### 8.2.1 Authentication
+### Authentication
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
@@ -87,7 +64,7 @@
 }
 ```
 
-### 8.2.2 Attendance
+### Attendance
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -127,7 +104,7 @@
 }
 ```
 
-### 8.2.3 Homework
+### Homework
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -146,7 +123,7 @@
 | `POST` | `/api/v1/{tenant}/homework/submissions/bulk-grade` | `homework:grade` | Bulk grade |
 | `POST` | `/api/v1/{tenant}/homework/{id}/attachments` | `homework:create` | Upload attachment |
 
-### 8.2.4 Exams
+### Exams
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -159,7 +136,7 @@
 | `GET` | `/api/v1/{tenant}/exams/{id}/stats` | `exam:view` | Class statistics |
 | `GET` | `/api/v1/{tenant}/exams/{id}/export` | `exam:view` | Export scores |
 
-### 8.2.5 Leave Management
+### Leave Management
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -167,7 +144,7 @@
 | `POST` | `/api/v1/{tenant}/leaves` | `leave:apply` | Apply for leave |
 | `PATCH` | `/api/v1/{tenant}/leaves/{id}/approve` | `leave:approve` | Approve/reject |
 
-### 8.2.6 Notifications
+### Notifications
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -175,7 +152,7 @@
 | `PATCH` | `/api/v1/{tenant}/notifications/{id}/read` | — (authenticated) | Mark as read |
 | `PATCH` | `/api/v1/{tenant}/notifications/read-all` | — (authenticated) | Mark all as read |
 
-### 8.2.7 Reports
+### Reports
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -185,7 +162,7 @@
 | `GET` | `/api/v1/{tenant}/reports/student/{id}` | `report:view` | Individual student report |
 | `GET` | `/api/v1/{tenant}/reports/export` | `report:export` | Export (CSV/Excel/PDF) |
 
-### 8.2.8 Administration
+### Administration
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -205,7 +182,7 @@
 | `GET` | `/api/v1/{tenant}/config` | `admin:settings` | Get all config |
 | `PUT` | `/api/v1/{tenant}/config` | `admin:settings` | Update config |
 
-### 8.2.9 Tenant Management (Super Admin)
+### Tenant Management (Super Admin)
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
@@ -215,7 +192,7 @@
 | `DELETE` | `/api/v1/{tenant}` | `tenant:manage` | Archive/delete tenant |
 | `POST` | `/api/v1/{tenant}/export` | `tenant:manage` | Export tenant data |
 
-### 8.2.10 Internal APIs (AI Service → Backend)
+### Internal APIs (AI Service → Backend)
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|

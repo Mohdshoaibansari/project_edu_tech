@@ -1,26 +1,21 @@
-# 7. Multi-Tenant Architecture Specification
+# 7. Multi-Tenant Implementation Patterns
 
-> **Status:** Draft — Pre-Implementation  
-> **Last Updated:** 2026-06-05
+> **Spec ID:** SPEC-MT-IMPL-001  
+> **Status:** Approved  
+> **Author:** Architecture & Engineering Team  
+> **Created:** 2026-06-05  
+> **Last Updated:** 2026-06-05  
+> **Related PRD Requirements:** All multi-tenant modules
 
----
+## Summary
 
-## 7.1 Multi-Tenant Strategy
+Implementation patterns for multi-tenant data isolation, tenant context resolution, configuration-driven design, and feature flags. This document covers **code-level patterns** (Prisma schemas, AsyncLocalStorage, RLS policies, configuration services).
 
-### Chosen Model: Hybrid Multi-Tenant (4-Tier)
-
-| Tier | Strategy | % of Tenants | When to Use |
-|------|----------|-------------|-------------|
-| **Tier 1** | Shared DB, Shared Schema | 90% | < 2,000 students, standard features |
-| **Tier 2** | Shared DB, Separate Schema | 5% | Needs custom database tables |
-| **Tier 3** | Dedicated Database | 3% | Enterprise, data residency requirements |
-| **Tier 4** | Dedicated Instance | 2% | 10,000+ students, government contracts |
-
-> **Full details:** See [`17-multi-tenant-strategy.md`](./17-multi-tenant-strategy.md) for connection pooling, routing, migration strategies, tenant onboarding, and tier decision matrix.
+> **Strategy decisions** (tier selection, connection routing, migration planning, tenant onboarding): See [`17-multi-tenant-strategy.md`](./17-multi-tenant-strategy.md).
 
 ---
 
-## 7.2 Tenant Data Model
+## Tenant Data Model
 
 ### Tenant Table
 
@@ -180,7 +175,7 @@ export class TenantMiddleware implements NestMiddleware {
 
 ---
 
-## 7.4 Configuration-Driven Design
+## Configuration-Driven Design
 
 ### Principle
 
@@ -313,7 +308,7 @@ export class AttendanceService {
 
 ---
 
-## 7.5 Tenant Onboarding
+## Tenant Onboarding
 
 ### Flow
 
@@ -371,7 +366,7 @@ const DEFAULT_TENANT_CONFIG: Record<string, any> = {
 
 ---
 
-## 7.6 Tenant Isolation Enforcement
+## Tenant Isolation Enforcement
 
 ### Testing Mandate
 
@@ -456,7 +451,7 @@ prisma.$use(async (params, next) => {
 
 ---
 
-## 7.7 Tenant Data Export & Deletion
+## Tenant Data Export & Deletion
 
 ### Export (Tenant Offboarding / Migration)
 

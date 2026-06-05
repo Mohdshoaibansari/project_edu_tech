@@ -635,6 +635,8 @@ model [ModelName] {
 ## 2.8 Implementation Review Checklist
 
 > Use this checklist when reviewing any spec implementation before merging.
+>
+> Also verify the mandatory **Definition of Done** from [`01-prd.md` §1.8](./01-prd.md) is met before marking a feature complete.
 
 ### Backend Checklist
 

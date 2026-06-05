@@ -7,9 +7,11 @@
 
 ## ⚠️ IMPORTANT: Read Before Implementation
 
-The initial specification (docs 1–10) assumed relatively uniform school requirements. The **Architecture Review (docs 11–20)** identified critical gaps. **Do not start implementation** without reviewing these findings.
+All specifications have been updated to reflect the engine-first architecture. **Phase 0 implementation can begin.**
 
-**Start here:** [`docs/spec/11-architecture-review.md`](./docs/spec/11-architecture-review.md)
+**Start here:** [`docs/spec/01-prd.md`](./docs/spec/01-prd.md)
+
+**Recommended reading order:** [`01-prd.md`](./docs/spec/01-prd.md) → [`03-architecture.md`](./docs/spec/03-architecture.md) → [`09-implementation-roadmap.md`](./docs/spec/09-implementation-roadmap.md)
 
 ---
 
@@ -45,13 +47,18 @@ project_edu_tech/
 ├── docs/
 │   └── spec/                          # ← Specification hub
 │       ├── README.md                  # Spec index + quick links
-│       ├── 01-10_*.md                 # Foundation specs (v1)
-│       └── 11-20_*.md                 # Architecture review + engines (v2) ⭐
+│       ├── 01-10_*.md                 # Foundation specs
+│       └── 12-20_*.md                 # Engine designs
 │
-├── server/                            # Backend API (NestJS) — Phase 0
-├── client/                            # Frontend (Next.js) — Phase 1
-├── ai-service/                        # Python AI Service — Phase 3
-└── contracts/                         # OpenAPI YAML files — Phase 0
+├── server/                            # Backend API (NestJS)
+├── client/                            # Frontend (Next.js)
+├── contracts/                         # OpenAPI YAML files
+└── README.md
+
+ai_chat/                               # ← Separate repo (AI Chatbot Service)
+├── docs/spec/                         # AI chatbot specifications
+├── src/                               # Python/FastAPI application
+└── README.md
 ```
 
 ---
@@ -60,10 +67,10 @@ project_edu_tech/
 
 ### Read the Specs (Recommended Order)
 
-1. **[Architecture Review](./docs/spec/11-architecture-review.md)** — What's wrong with the current design
-2. **[Configuration Engine](./docs/spec/12-configuration-engine.md)** — Foundation for all per-school variability
-3. **[Extensibility & Migration](./docs/spec/20-extensibility-migration.md)** — How to get from here to there
-4. **[DDD Bounded Contexts](./docs/spec/18-domain-driven-design.md)** — Proper domain boundaries
+1. **[PRD](./docs/spec/01-prd.md)** — Product vision, requirements, development standards
+2. **[System Architecture](./docs/spec/03-architecture.md)** — High-level architecture + engine philosophy
+3. **[Implementation Roadmap](./docs/spec/09-implementation-roadmap.md)** — Week-by-week execution plan
+4. **[Domain-Driven Design](./docs/spec/18-domain-driven-design.md)** — Bounded contexts and context map
 
 ### Full Index
 
@@ -71,7 +78,7 @@ See [`docs/spec/README.md`](./docs/spec/README.md) for the complete 20-document 
 
 ### Implementation Status
 
-🟡 **Pre-Implementation, Architecture Review Complete** — Foundation refactoring (Phase 0) is the next step.
+🟢 **Specification Complete** — All specs updated. Phase 0 implementation is the next step.
 
 ---
 
@@ -137,4 +144,4 @@ See [`docs/spec/README.md`](./docs/spec/README.md) for the complete 20-document 
 
 ---
 
-> **Status:** Pre-Implementation | **Branch:** `spec/prd-and-template` | **Last Updated:** 2026-06-05 (v2)
+> **Status:** Pre-Implementation | **Branch:** `spec/prd-and-template` | **Last Updated:** 2026-06-05 (v2.1 — Skill-Standards Alignment)

@@ -411,6 +411,311 @@ export class AttendanceService {
 }
 ```
 
+## 12.6a Template Catalog — Standard School Templates
+
+Every new tenant **must** start from one of these maintained templates. Blank configuration is never allowed.
+
+### Template: CBSE Standard (`cbse-standard`)
+
+Default for most Indian K-12 schools following CBSE board.
+
+| Config Key | Summary |
+|-----------|---------|
+| `attendance.statuses` | 3 statuses: Present, Absent, Late. Daily mode. Weighted calculation (Late=0.5) |
+| `grading.scale` | Grade bands: A+ (90-100) through F (0-34). 8 bands with grade points |
+| `academic.calendar` | Semester structure (2 terms: Jun-Oct, Nov-Apr). Mid-term + final exams per semester |
+| `leave.types` | Sick Leave (12 days), Casual Leave (8 days), Emergency Leave (5 days) |
+| `promotion.rules` | ≥75% attendance, ≥2.0 GPA, max 0 failed subjects → promoted |
+
+### Template: ICSE Standard (`icse-standard`)
+
+For ICSE-affiliated schools with different grading conventions.
+
+| Config Key | Summary |
+|-----------|---------|
+| `attendance.statuses` | 4 statuses: Present, Absent, Late, Medical Leave. Medical counts as present |
+| `grading.scale` | Percentage-based. No grade bands — raw percentage displayed |
+| `academic.calendar` | Trimester structure (3 terms: Apr-Jul, Aug-Nov, Dec-Mar) |
+| `leave.types` | Same as CBSE but Medical Leave requires documentation |
+| `promotion.rules` | ≥80% attendance, pass all core subjects → promoted |
+
+### Template: Preschool / Early Years (`preschool`)
+
+Simplified configuration for preschools and daycare centers.
+
+| Config Key | Summary |
+|-----------|---------|
+| `attendance.statuses` | 2 statuses: Present, Absent. No weights. No late tracking |
+| `grading.scale` | None — no formal grading. Observational notes only |
+| `academic.calendar` | Annual (1 term: Jun-Mar). No exams. Holiday list only |
+| `leave.types` | Inform Leave only (unlimited). No approval workflow |
+| `promotion.rules` | Auto-promote by age. No academic criteria |
+
+### Template: International School (`international`)
+
+For IB/Cambridge schools with GPA, semester credits, and complex workflows.
+
+| Config Key | Summary |
+|-----------|---------|
+| `attendance.statuses` | 5 statuses: Present, Absent, Late, Excused Absence, School Activity. Period-based mode |
+| `grading.scale` | GPA 4.0 scale with credit-hour weighting. Grade bands with IB-equivalent descriptors |
+| `academic.calendar` | Semester structure with flexible exam windows |
+| `leave.types` | Sick Leave, Family Leave, College Visit, School Activity. Multi-step approval workflow |
+| `promotion.rules` | ≥90% attendance, ≥2.5 GPA, CAS requirements met → promoted |
+
+### Template Metadata
+
+```sql
+ALTER TABLE config_templates ADD COLUMN tags TEXT[];
+ALTER TABLE config_templates ADD COLUMN school_size VARCHAR;
+ALTER TABLE config_templates ADD COLUMN regions TEXT[];
+ALTER TABLE config_templates ADD COLUMN maintained_by UUID;
+ALTER TABLE config_templates ADD COLUMN last_reviewed_at TIMESTAMPTZ;
+ALTER TABLE config_templates ADD COLUMN deprecated_at TIMESTAMPTZ;
+```
+
+---
+
+## 12.6b Mandatory Template Inheritance — Enforcement
+
+### Core Rule: Never Start From Blank
+
+The tenant onboarding flow **enforces** template selection. It is impossible to create a tenant without choosing a template.
+
+### Tenant Onboarding Flow (Updated)
+
+```
+1. Super Admin creates Tenant (name, slug)
+2. System presents template catalog: CBSE | ICSE | Preschool | International | Custom Import
+3. Admin selects template → system clones template configs into tenant_configs
+4. Admin customizes: overrides only what differs from the template
+5. All config keys NOT overridden inherit from the template
+6. Tenant goes live
+```
+
+### Enforcement in Code
+
+```typescript
+@Injectable()
+export class TenantOnboardingService {
+  constructor(
+    private configEngine: ConfigurationEngine,
+    private templateRepo: TemplateRepository
+  ) {}
+  
+  async onboardTenant(dto: OnboardTenantDTO): Promise<Tenant> {
+    const template = await this.templateRepo.findById(dto.templateId);
+    if (!template) {
+      throw new ValidationError(
+        `Template '${dto.templateId}' not found. ` +
+        `Available: ${await this.templateRepo.listActiveNames()}`
+      );
+    }
+    
+    const tenant = await this.tenantRepo.create({ name: dto.name, slug: dto.slug });
+    
+    const templateConfigs = await this.configEngine.getTemplateConfigs(template.id);
+    for (const config of templateConfigs) {
+      await this.configEngine.set(tenant.id, config.schemaKey, config.configValue, {
+        inheritedFrom: template.id,
+        createdBy: dto.adminUserId
+      });
+    }
+    
+    await this.tenantRepo.update(tenant.id, {
+      source_template_id: template.id,
+      source_template_version: template.version
+    });
+    
+    await this.eventBus.emit('tenant.onboarded', {
+      tenantId: tenant.id, templateId: template.id, templateVersion: template.version
+    });
+    
+    return tenant;
+  }
+}
+```
+
+### Template Lineage Tracking
+
+```sql
+ALTER TABLE tenants ADD COLUMN source_template_id UUID REFERENCES config_templates(id);
+ALTER TABLE tenants ADD COLUMN source_template_version INTEGER;
+ALTER TABLE tenants ADD COLUMN template_applied_at TIMESTAMPTZ;
+
+-- Which tenants use which template?
+SELECT t.name AS template, COUNT(ten.id) AS tenant_count
+FROM config_templates t
+JOIN tenants ten ON ten.source_template_id = t.id
+GROUP BY t.name;
+
+-- Which tenants are on outdated template versions?
+SELECT ten.name, ten.source_template_version, t.version AS current_version
+FROM tenants ten
+JOIN config_templates t ON t.id = ten.source_template_id
+WHERE ten.source_template_version < t.version;
+```
+
+---
+
+## 12.6c Template Management Lifecycle
+
+### Template Versioning
+
+Templates are versioned. When a template is updated, inheriting tenants are **NOT** automatically updated — they must explicitly adopt the new version.
+
+```
+Template v1 (published)
+  ├── Tenant A (inherits v1, overrides grading)
+  ├── Tenant B (inherits v1, no overrides)
+  └── Tenant C (inherits v1, overrides calendar)
+
+Template v2 (published — updated attendance formula)
+  ├── Tenant A (still on v1 — needs review)
+  ├── Tenant B (adopts v2 — re-inherits with overrides preserved)
+  └── Tenant C (still on v1)
+```
+
+### Template Upgrade Flow
+
+```typescript
+@Injectable()
+export class TemplateUpgradeService {
+  
+  async analyzeUpgradeImpact(templateId: string, newVersion: number): Promise<UpgradeImpact> {
+    const tenants = await this.getInheritingTenants(templateId);
+    const newTemplate = await this.templateRepo.getVersion(templateId, newVersion);
+    const impact: UpgradeImpact = { tenants: [] };
+    
+    for (const tenant of tenants) {
+      const currentConfigs = await this.configEngine.getAllForTenant(tenant.id);
+      const changes: ConfigChange[] = [];
+      for (const [key, newValue] of Object.entries(newTemplate.configs)) {
+        if (tenant.overrides?.[key]) {
+          changes.push({ key, status: 'skipped', reason: 'tenant has override' });
+        } else if (!deepEqual(currentConfigs[key], newValue)) {
+          changes.push({ key, status: 'will_change', oldValue: currentConfigs[key], newValue });
+        }
+      }
+      impact.tenants.push({ tenantId: tenant.id, tenantName: tenant.name, changes,
+        actionRequired: changes.some(c => c.status === 'will_change') });
+    }
+    return impact;
+  }
+  
+  async upgradeTenant(tenantId: string, newTemplateVersion: number): Promise<void> {
+    const tenant = await this.tenantRepo.findById(tenantId);
+    const template = await this.templateRepo.getVersion(tenant.source_template_id, newTemplateVersion);
+    const overrides = await this.configEngine.getOverrides(tenantId);
+    
+    for (const [key, value] of Object.entries(template.configs)) {
+      if (overrides[key]) continue;
+      await this.configEngine.set(tenantId, key, value, {
+        inheritedFrom: template.id, version: newTemplateVersion
+      });
+    }
+    await this.tenantRepo.update(tenantId, {
+      source_template_version: newTemplateVersion, template_applied_at: new Date()
+    });
+  }
+}
+```
+
+### Template Deprecation
+
+1. Mark template `deprecated_at = now()`
+2. Prevent new tenants from selecting it
+3. Existing tenants continue to function on frozen version
+4. Super Admin can migrate tenants to a different template (with manual review of all overrides)
+
+---
+
+## 12.6d Configuration Governance — Sprawl Prevention
+
+### Guardrails
+
+| Guardrail | Limit | Enforcement |
+|-----------|-------|-------------|
+| **Max active configs per tenant** | 100 | Reject writes beyond limit |
+| **Max overrides per tenant** | 50 | Warn at 25, reject at 50 |
+| **Max config size (JSONB)** | 100KB per schema key | Reject on save |
+| **Stale config detection** | Configs not updated in 180 days flagged | Weekly cron job |
+| **Orphaned overrides** | Override exists but template no longer has that key | Weekly audit report |
+| **Max version history per config** | 50 versions | Auto-archive beyond 50 to cold storage |
+
+### Config Drift Detection
+
+```typescript
+@Injectable()
+export class ConfigGovernanceService {
+  
+  @Cron('0 2 * * 0')
+  async detectConfigDrift(): Promise<DriftReport[]> {
+    const tenants = await this.tenantRepo.findAllActive();
+    const reports: DriftReport[] = [];
+    
+    for (const tenant of tenants) {
+      if (!tenant.source_template_id) continue;
+      
+      const template = await this.templateRepo.getLatest(tenant.source_template_id);
+      const tenantConfigs = await this.configEngine.getAllForTenant(tenant.id);
+      const overrides = tenantConfigs.filter(c => c.isOverride);
+      const driftScore = this.calculateDriftScore(overrides, template);
+      
+      if (driftScore > 70) {
+        reports.push({
+          tenantId: tenant.id, tenantName: tenant.name,
+          templateName: template.name, driftScore,
+          overrideCount: overrides.length,
+          severity: driftScore > 90 ? 'critical' : 'warning',
+          recommendation: 'Consider creating a custom template or reviewing overrides'
+        });
+      }
+    }
+    
+    if (reports.length > 0) await this.notificationService.sendDriftReport(reports);
+    return reports;
+  }
+  
+  private calculateDriftScore(overrides: TenantConfig[], template: ConfigTemplate): number {
+    let score = 0;
+    score += overrides.length * 5;
+    score += overrides.filter(o => o.isCustomSchema).length * 15;
+    score += overrides.filter(o => o.valueSize > 50000).length * 10;
+    return Math.min(score, 100);
+  }
+}
+```
+
+### Config Sprawl Dashboard (Backend-Admin UI)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  📊 Configuration Governance — Platform Overview                  │
+│                                                                   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+│  │ 247      │  │ 4        │  │ 3        │  │ 2 Drifting       │ │
+│  │ Tenants  │  │ Templates│  │ Versions │  │ Tenants ⚠️       │ │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘ │
+│                                                                   │
+│  Template Distribution:                                           │
+│  ████████████████████ CBSE Standard (182 tenants, 73%)            │
+│  ██████ ICSE Standard (41 tenants, 17%)                           │
+│  ██ Preschool (18 tenants, 7%)                                    │
+│  █ International (6 tenants, 3%)                                  │
+│                                                                   │
+│  ⚠️ Drift Alerts:                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │ Tenant           │ Template │ Drift │ Overrides │ Severity  │ │
+│  │──────────────────┼──────────┼───────┼───────────┼───────────│ │
+│  │ Delhi Public     │ CBSE     │ 85%   │ 42        │ ⚠️ HIGH   │ │
+│  │ Intl. Academy    │ Intl.    │ 72%   │ 35        │ ⚠️ MEDIUM │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  [View All Tenants by Template]  [Export Drift Report]            │
+└──────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 12.9 Configuration Migration & Rollback

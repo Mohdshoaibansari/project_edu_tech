@@ -6,6 +6,126 @@
 
 ## [Unreleased]
 
+### 2026-06-05 (v2.9) — Backend AI Module vs AI Chat Service Clarification
+
+- **Updated:** [`01-prd.md`](./01-prd.md) §1.8 Communication Pattern
+  - Fixed architecture diagram: removed incorrect "Python AI Service" connection from backend
+  - Added three-consumer model: Frontend (JWT), AI Chat Service (x-api-key), Backend AI Module (internal)
+  - Documented key distinction: Backend AI Module handles backend-initiated tasks (homework gen, auto-grading), AI Chat Service handles conversational chatbot
+- **Updated:** [`03-architecture.md`](./03-architecture.md)
+  - Added AI Module block inside backend diagram (homework gen, auto-grading, report summaries)
+  - AI Chat Service remains as separate external consumer
+  - Added cross-references for both
+- **Added:** [`04-backend-spec.md` §4.12](./04-backend-spec.md) — Backend AI Module
+  - Distinction table: Backend AI Module vs AI Chat Service (location, trigger, runtime, use cases, data access)
+  - AI task definitions: homework.ai_generate, grading.auto_evaluate, report.parent_summary, ocr.extract_text, image.quality_check
+  - Implementation: AIModule, AITaskService with BullMQ async jobs, AI provider integration
+  - Shared AI provider configuration: both modules use same per-tenant config stored in backend
+
+### 2026-06-05 (v2.8) — AI Chatbot Extracted to Separate Repository
+
+- **Removed:** [`19-ai-readiness.md`](./19-ai-readiness.md) — AI Readiness Assessment
+  - Content moved to [`ai_chat` repository](../../../ai_chat/) specs
+  - AI provider abstraction, task definitions, cost management, multi-channel architecture all transferred
+- **Updated:** [`01-prd.md`](./01-prd.md) — Module 7 (AI Chatbot)
+  - Replaced functional requirements table with reference to ai_chat repo
+  - Backend responsibility clarified: expose `/api/v1/ai/*` internal endpoints for ai_chat service to consume
+- **Updated:** [`03-architecture.md`](./03-architecture.md) — Architecture diagram
+  - Simplified AI service block to show it's an external service in a separate repository
+- **Updated:** [`09-implementation-roadmap.md`](./09-implementation-roadmap.md) — Phase 3
+  - Removed AI provider abstraction, chatbot integration, auto-grading, homework generator, usage tracking tasks
+  - Added Internal AI API task (expose endpoints for ai_chat service) and ai_chat integration task
+- **Updated:** [`18-domain-driven-design.md`](./18-domain-driven-design.md)
+  - Updated "Next" reference from doc 19 to doc 20
+- **Updated:** README files and spec index
+  - Added ai_chat repo reference to repository structure, How to Use, and architectural decisions
+- **Created:** `ai_chat` repository at `D:\IT Solutions\Schools IT\ai_chat\`
+  - `01-prd.md` — AI Chatbot PRD (chatbot features, AI tasks, multi-channel, provider abstraction, cost management)
+  - `02-architecture.md` — Service architecture (FastAPI, channel adapters, intent classifier, backend API client, deployment)
+  - `03-api-contracts.md` — Backend APIs consumed by chatbot (auth, attendance, homework, leave, exams, config, internal AI endpoints)
+  - `README.md` — Project overview, tech stack, data access rule (never direct DB)
+
+### 2026-06-05 (v2.7) — Reporting Architecture + Search Strategy
+
+- **Enhanced:** [`18-domain-driven-design.md`](./18-domain-driven-design.md) — DDD Bounded Contexts
+  - **§8 Reporting Context:** Expanded from a single table to a full deferred architecture. Phased build strategy (Phase 1: direct query → Phase 3: read replica → Phase 4: dedicated analytics DB with materialized views). Database isolation rule prohibiting analytical queries on OLTP tables. Reporting data patterns (live dashboard, periodic snapshot, pre-aggregated metric, cross-year analysis, export). Anti-patterns documented (no unbounded `COUNT(*)`, no synchronous PDF generation, no heavy queries during attendance rush hour).
+- **Added:** [`04-backend-spec.md` §4.11](./04-backend-spec.md) — Search Strategy
+  - Phased search strategy: PostgreSQL FTS with trigram GIN indexes (Phase 1-2) → `tsvector` columns with weighted FTS (Phase 3) → OpenSearch (Phase 4, only when thresholds exceeded). `SearchService` implementation with tenant-scoped ILIKE search. OpenSearch trigger conditions: 500ms p95, 50+ req/s, multi-language stemming, faceted search, relevance tuning needed. Explicit "DO NOT introduce OpenSearch before these thresholds" constraint.
+- **Updated:** [`01-prd.md`](./01-prd.md)
+  - Module 6: Added reference to reporting architecture in doc 18.
+  - NFRs: Added Search section (NF-SH01, NF-SH02, NF-SH03) with phased FTS/OpenSearch strategy.
+  - Risks: Added "Reporting performance impact on OLTP" and "Search strategy missing" entries with mitigations.
+- **Updated:** [`09-implementation-roadmap.md`](./09-implementation-roadmap.md)
+  - Phase 1: Added search index + SearchService tasks.
+  - Phase 4: Added reporting read replica, materialized views, analytics DB, PostgreSQL FTS upgrade, OpenSearch evaluation tasks.
+- **Remediated risks:** Reporting Context Underspecified (now has full deferred architecture with DB isolation), Search Strategy Missing (now has phased PostgreSQL FTS → OpenSearch plan with explicit trigger conditions).
+
+### 2026-06-05 (v2.6) — Configuration Governance (Sprawl Prevention)
+
+- **Enhanced:** [`12-configuration-engine.md`](./12-configuration-engine.md) — Configuration Engine Design
+  - **§12.6a Template Catalog (NEW):** Four standard school templates defined — CBSE Standard, ICSE Standard, Preschool, International School. Each template specifies default values for attendance.statuses, grading.scale, academic.calendar, leave.types, and promotion.rules.
+  - **§12.6b Mandatory Template Inheritance (NEW):** Enforcement that new tenants **must** start from a template — blank configuration is impossible. Tenant onboarding flow clones all template configs. Template lineage tracked on tenant record (`source_template_id`, `source_template_version`).
+  - **§12.6c Template Management Lifecycle (NEW):** Template versioning (tenants NOT auto-updated on template changes). `TemplateUpgradeService` with impact analysis before upgrade. Template deprecation workflow.
+  - **§12.6d Configuration Governance (NEW):** Guardrails with hard limits (max 100 configs/tenant, max 50 overrides, max 100KB per config, max 50 versions). `ConfigGovernanceService` with weekly drift detection cron job. Config Sprawl Dashboard in backend-admin UI showing template distribution, drift alerts, and override counts.
+  - **Remediated risk:** Configuration Sprawl — after 100 schools managing 5,000 configs is now prevented by mandatory templates, drift detection, and hard guardrails.
+
+### 2026-06-05 (v2.5) — Rules Engine Hardening (Execution Tracing + Advanced Capabilities)
+
+- **Enhanced:** [`13-rules-engine.md`](./13-rules-engine.md) — Rules Engine Design
+  - **§13.4 Condition Format:** Expanded to full operator table (10 leaf operators + AND/OR/NOT/always/lookup). Documented arbitrary nesting depth support.
+  - **§13.4 Action Format:** Expanded to 8 action types including new `compute` (intermediate calculated fields) and `lookup` (enrich context from external datasets).
+  - **§13.4a Formula Expression Language (NEW):** Defined sandboxed formula engine with 12 supported functions (SUM, AVG, COUNT, MIN, MAX, ROUND, FLOOR, CEIL, ABS, IF, COALESCE, WEIGHTED_AVG). Arithmetic operators. Safety constraints.
+  - **§13.4b Cross-Dataset References (NEW):** `lookup` condition type for querying other tables within rules. `lookup` action type for enriching context from external data. DataSourceRegistry pattern for registered resolvers (no raw SQL in rules).
+  - **§13.6 Rule Execution Engine:** Complete rewrite — added `ExecutionTrace`, `RuleTrace`, and `ConditionTrace` models. Engine now returns detailed per-condition match/fail reasons (e.g., "score (85) is not ≥ 90"). Trace enabled via `{ trace: true }` option; production hot-path skips trace overhead. Leaf condition tracing includes field name, actual value, expected value, and human-readable reason.
+  - **§13.9 Rule Administration UI:** Redesigned with trace-integrated tester showing per-condition pass/fail with values and reasons. Added rule editor with condition builder UI. Added `rule_execution_logs` table for audit trail.
+  - **Remediated risk:** Rules Engine Complexity — nested conditions, formula builders, cross-dataset references, calculated fields, and execution tracing all now specified.
+
+### 2026-06-05 (v2.4) — Backend-First Implementation + Backend-Admin UI
+
+- **Restructured implementation plan:** Backend built before customer frontends (see rationale below)
+  - **Phase 0 (Weeks 1-4):** Backend Engine Foundation + Backend-Admin UI — engines, APIs, and a thin server-rendered admin interface (NestJS MVC + Handlebars) for configuring tenants. Customer frontends not yet built.
+  - **Phase 1 (Weeks 5-10):** Backend Business Modules — all business logic on top of engines. OpenAPI specs finalized. Generated TypeScript SDK ready.
+  - **Phase 2 (Weeks 11-16):** Customer Frontends — Next.js apps consuming completed APIs via generated SDK
+  - **Phase 3 (Weeks 17-22):** Advanced Engines + AI — Metadata, Template, AI abstraction
+  - **Phase 4 (Weeks 23-28):** Enterprise + Scale — Tier 2-4 multi-tenant, monitoring, CI/CD
+- **Rationale:** Frontend is independent of backend. Building backend first with a thin admin UI proves the APIs are truly generic and consumable by any client. Generated SDK eliminates guesswork when frontend development begins.
+- **Files updated:**
+  - **`09-implementation-roadmap.md`** — Complete rewrite with backend-first phases, week-by-week tasks, admin UI details
+  - **`01-prd.md`** — Updated Phase 0-4 descriptions to reflect backend-first sequencing and backend-admin UI
+  - **`04-backend-spec.md`** — Added §4.10 Backend-Admin UI section with technology, pages, and architecture rule
+  - **`03-architecture.md`** — Added admin UI to cross-reference table
+
+### 2026-06-05 (v2.3) — Architecture Review Document Retired
+
+- **Removed:** [`11-architecture-review.md`](./11-architecture-review.md) — Architecture Review & Gap Analysis
+  - All 10 improvement recommendations have been implemented across the current specs (v2.1–v2.2)
+  - The document's critiques no longer apply to the updated specs, creating a self-contradictory narrative
+  - Architectural rationale (why engine-first) merged into [`03-architecture.md`](./03-architecture.md) as a "Philosophy" section
+  - All cross-references cleaned up across README.md, docs/spec/README.md, docs/spec/20-extensibility-migration.md
+
+### 2026-06-05 (v2.2) — Redundancy Elimination & Spec Template Migration
+
+- **Restructured docs 03–09** using spec-driven template format from [`02-spec-template.md`](./02-spec-template.md):
+  - **`03-architecture.md`** — Slimmed from 474 lines to a concise high-level architecture overview. Removed duplicated auth flow (→06), domain module tree (→18), multi-tenant data flow (→07), and tech stack table (→04/05). Added cross-reference table mapping each topic to its canonical document.
+  - **`04-backend-spec.md`** — Removed duplicated bounded contexts tree (→18), engine service interfaces (→12-16), and API design standards (→PRD §1.5a). Added spec header and cross-references. Kept unique content: reference data tables, domain events, config-driven service code, authorization, testing.
+  - **`05-frontend-spec.md`** — Slimmed from 638 to ~330 lines. Removed sections duplicated in PRD §1.8 (module structure, state management, UX states, accessibility, performance standards). Kept unique implementation content: per-client customization layers, dynamic config-driven UI code examples, design system, feature flags, generated API client.
+  - **`07-multi-tenant-spec.md`** — Renamed to "Multi-Tenant Implementation Patterns". Removed strategy content (→17). Added clear disambiguation: doc 07 = code-level patterns, doc 17 = strategy decisions. Removed section numbering.
+  - **`08-api-contracts.md`** — Removed generic API conventions (URL structure, headers, query params → PRD §1.5a). Added spec header. Kept per-module endpoint tables as unique value. Removed subsection numbering.
+  - **`09-implementation-roadmap.md`** — Added spec header + cross-reference note that PRD §1.9 has the executive-level phase summary.
+  - **`02-spec-template.md`** — Added cross-reference to PRD Definition of Done in the review checklist.
+
+### 2026-06-05 (v2.1) — Skill-Standards Alignment Update
+
+- **Updated:** [`01-prd.md`](./01-prd.md) — Product Requirements Document (v2.0.0 → v2.1.0)
+  - **Added Section 1.5a — API Design Standards:** Unified success/error response format, module-scoped error codes, pagination (offset + cursor), standardized filtering/sorting conventions, idempotency-key support, backward compatibility rules, OpenAPI as single source of truth
+  - **Enhanced Section 1.6 — Non-Functional Requirements:** Added Observability (structured logging, correlation IDs, Prometheus metrics, health checks, distributed tracing, Sentry, Web Vitals, user action tracking, session replay), Background Processing (Bull/BullMQ job queue, retry, dead letter queue), Rate Limiting & API Security (rate limit headers, API keys, webhooks), Data Integrity (soft deletes, unique constraints with soft-delete awareness)
+  - **Enhanced Section 1.8 — Backend Development Standards:** Domain-oriented module architecture with mandatory per-module documentation (README.md, api-contract.yaml, permissions.md, workflows.md, dto.md, error-codes.md). Strict layered architecture (Controller/Service/Repository). DTO-based APIs (no raw entities exposed). Service abstractions for FileService, NotificationService, ConfigurationService, FeatureFlagService, AuditService. Template-based notification system with background delivery. File management abstraction with per-tenant organization. Contract-driven development enforcement with CI/CD validation. Definition of Done with 10-step checklist.
+  - **Added Section 1.8 — Frontend Development Standards:** Feature-based domain architecture with generated/ and shared/ directory structure. AI-agent friendly conventions (module naming, page suffixes, hook prefixes, named exports, path aliases, barrel exports). State management separation (TanStack Query for server state, Zustand for UI state, React Hook Form for forms). API layer isolation with DTO mapping pipeline (OpenAPI → Generated SDK → API Layer → Mappers → Hooks → Components). Mandatory generated types (handwritten DTOs prohibited). Strict TypeScript with `any` forbidden. UX four-state pattern (Loading/Empty/Error/Success). Offline resilience with OfflineBanner. Component libraries (Design System, DataTable, Form Framework). Performance patterns (code splitting, lazy loading, memoization, virtualization). Auth patterns (AuthProvider, permission-based UI, backend-driven navigation, global error interceptor, ErrorBoundary).
+  - **Added Section 1.9a — Testing Strategy:** Testing pyramid with Vitest, MSW, Playwright. Unit tests (components, hooks, mappers, utilities) at 80%+ coverage. Integration tests for module workflows. E2E tests for critical user journeys (login, attendance, homework lifecycle, leave request, reports, student CRUD). CI/CD integration with coverage gates.
+  - **Updated Phase 0:** Added service abstractions, API standards enforcement, OpenAPI scaffolding, testing infrastructure, observability setup, CI/CD scaffolding, module documentation templates
+  - **Updated Phase 1:** Added frontend infrastructure deliverables (AuthProvider, generated SDK, design system, DataTable, forms, ErrorBoundary), frontend testing coverage, feature flags, environment config pattern
+  - **Updated Section 1.11 — Risks:** Added 7 new risks: OpenAPI contract drift, frontend-backend type mismatch, observability blind spots, notification delivery failures, file storage provider lock-in, accessibility non-compliance, codebase inconsistency for AI agents
+
 ### 2026-06-05 (v2) — Architecture Review & Engine Designs
 
 - **Added:** [`11-architecture-review.md`](./11-architecture-review.md) — Architecture Review & Gap Analysis

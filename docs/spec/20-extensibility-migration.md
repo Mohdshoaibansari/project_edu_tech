@@ -284,6 +284,3 @@ Phase 3+ (Decoupled Services):
 10. **Review these specifications with the team** and update the PRD, architecture, and implementation roadmap documents to reflect the engine-first approach.
 
 ---
-
-> **End of Architecture Review Series.**  
-> **Next:** Update [`README.md`](./README.md), [`01-prd.md`](./01-prd.md), and [`09-implementation-roadmap.md`](./09-implementation-roadmap.md) to reflect these findings.

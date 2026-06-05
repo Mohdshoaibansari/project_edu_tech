@@ -1,7 +1,11 @@
 # 4. Backend Specification (Engine-First)
 
-> **Status:** Updated — Post-Architecture-Review  
-> **Last Updated:** 2026-06-05
+> **Spec ID:** SPEC-BACKEND-001  
+> **Status:** Approved  
+> **Author:** Architecture & Engineering Team  
+> **Created:** 2026-06-05  
+> **Last Updated:** 2026-06-05  
+> **Related PRD Requirements:** All backend modules (AT-*, HW-*, EX-*, LV-*, NT-*, DR-*, AD-*)
 
 ---
 
@@ -24,42 +28,11 @@
 
 ---
 
-## 4.2 Architecture: Bounded Contexts + Engine Layer
+## 4.2 Service Architecture
 
-### Context Map
-
-```
-server/src/
-├── contexts/                        # Bounded contexts (DDD)
-│   ├── identity/                    # Users, roles, auth, sessions
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── infrastructure/
-│   │   └── interfaces/
-│   │
-│   ├── academic-structure/          # Tenants, grades, sections, subjects, classes, calendar, students, teachers
-│   ├── attendance/                  # Attendance records, statuses, corrections, tracking
-│   ├── assessment/                  # Homework, exams, submissions, grading, rubrics
-│   ├── leave/                       # Leave requests, balances, approval workflows
-│   ├── communication/               # Notifications, chatbot, messaging, announcements
-│   │
-│   ├── configuration/               # Cross-cutting: Configuration Engine
-│   │   ├── config-engine/           # Hierarchical JSON Schema config
-│   │   ├── rules-engine/            # JSON condition/action evaluation
-│   │   ├── workflow-engine/         # Configurable state machines
-│   │   ├── metadata-engine/         # Custom fields without schema changes
-│   │   └── template-engine/         # Document generation (Handlebars + PDF)
-│   │
-│   └── reporting/                   # Cross-cutting: Reports, dashboards, exports
-│
-├── shared-kernel/                    # Shared types, errors, event bus, DB client
-│   ├── types/
-│   ├── errors/
-│   ├── events/
-│   └── database/
-│
-└── main.ts
-```
+> **Bounded context definitions and context mapping:** See [`18-domain-driven-design.md`](./18-domain-driven-design.md) for the canonical bounded context boundaries, aggregate roots, domain events per context, and context map.
+>
+> **High-level module structure:** See [`03-architecture.md`](./03-architecture.md) for the overall system architecture.
 
 ### Integration Rules
 
@@ -69,6 +42,27 @@ server/src/
 | **Shared Kernel is minimal** | Only branded ID types (`TenantId`, `UserId`, `StudentId`), error classes, event definitions, DB client |
 | **Configuration Context is a dependency** | Business contexts depend ON Configuration (to load per-tenant settings), not the reverse |
 | **Anti-Corruption Layer** | SuperTokens adapter (Identity Context), external notification providers (Communication Context) |
+
+### Backend Module Standards
+
+Each backend module follows the standard structure defined in PRD §1.8 (Backend Development Standards):
+
+```
+module/
+├── README.md           # Business purpose, rules, dependencies
+├── api-contract.yaml   # OpenAPI contract for all module endpoints
+├── permissions.md      # Permission definitions and required roles
+├── workflows.md        # State machines, transitions, approvals
+├── dto.md              # DTO field definitions, types, validation rules
+├── error-codes.md      # Module-specific error codes
+├── controller/         # Request handling, validation, response formatting
+├── service/            # Business logic, permission checks, transactions
+├── repository/         # Database operations
+├── dto/                # Request/response DTOs
+├── validation/         # Zod schemas / class-validator rules
+├── permissions/        # Module-specific permission guards
+└── tests/              # Unit + integration tests
+```
 
 ---
 
@@ -336,69 +330,15 @@ model AcademicTerm {
 
 ## 4.4 Engine Services
 
-### Configuration Engine
+> **Canonical engine designs:** Each engine has a dedicated specification document with full interface definitions, schemas, and examples.
 
-```typescript
-@Injectable()
-export class ConfigurationEngine {
-  async get<T>(tenantId: string, schemaKey: string): Promise<T>;
-  async set(tenantId: string, schemaKey: string, value: any, userId: string): Promise<void>;
-  async getHierarchical(tenantId: string): Promise<Record<string, any>>;  // Merged config tree
-  async validate(schemaKey: string, value: any): Promise<ValidationResult>;
-  async getHistory(tenantId: string, schemaKey: string): Promise<ConfigVersion[]>;
-  async rollback(tenantId: string, schemaKey: string, version: number): Promise<void>;
-  
-  // Convenience methods
-  async getAttendanceStatuses(tenantId: string): Promise<AttendanceStatusDef[]>;
-  async getGradingScale(tenantId: string): Promise<GradingScale>;
-  async getAcademicCalendar(tenantId: string): Promise<AcademicCalendar>;
-}
-```
-
-### Rules Engine
-
-```typescript
-@Injectable()
-export class RulesEngine {
-  async evaluate<T>(tenantId: string, ruleSetCode: string, context: Record<string, any>): Promise<T>;
-  async evaluateAll<T>(tenantId: string, ruleSetCode: string, context: Record<string, any>): Promise<T[]>;
-}
-```
-
-### Workflow Engine
-
-```typescript
-@Injectable()
-export class WorkflowEngine {
-  async startWorkflow(tenantId: string, workflowCode: string, entityType: string, entityId: string, context: any, actorId: string): Promise<WorkflowInstance>;
-  async transition(instanceId: string, transitionName: string, actorId: string, comment?: string): Promise<WorkflowHistory>;
-  async getAvailableTransitions(instanceId: string, actorId: string): Promise<WorkflowTransition[]>;
-  async getStatus(instanceId: string): Promise<WorkflowStatus>;
-}
-```
-
-### Metadata Engine
-
-```typescript
-@Injectable()
-export class MetadataEngine {
-  async getFieldDefinitions(tenantId: string, entityType: string): Promise<FieldDefinition[]>;
-  async validateMetadata(tenantId: string, entityType: string, metadata: Record<string, any>): Promise<ValidationResult>;
-  async applyDefaults(tenantId: string, entityType: string, metadata: Record<string, any>): Promise<Record<string, any>>;
-  async generateFormConfig(tenantId: string, formCode: string): Promise<FormConfig>;
-}
-```
-
-### Template Engine
-
-```typescript
-@Injectable()
-export class TemplateEngine {
-  async generateDocument(tenantId: string, templateCode: string, entityType: string, entityId: string, format: 'pdf'|'html'): Promise<GeneratedDocument>;
-  async previewTemplate(tenantId: string, templateCode: string, sampleData?: any): Promise<string>;
-  async getTemplateDataSchema(tenantId: string, templateCode: string): Promise<JSONSchema>;
-}
-```
+| Engine | Document | Purpose |
+|--------|----------|---------|
+| **Configuration Engine** | [`12-configuration-engine.md`](./12-configuration-engine.md) | Hierarchical JSON Schema config — attendance statuses, grading scales, academic calendars |
+| **Rules Engine** | [`13-rules-engine.md`](./13-rules-engine.md) | JSON condition/action evaluation — grade calculation, attendance aggregation, promotion eligibility |
+| **Workflow Engine** | [`14-workflow-engine.md`](./14-workflow-engine.md) | Configurable state machines — leave approvals, attendance corrections, admissions |
+| **Metadata Engine** | [`15-metadata-engine.md`](./15-metadata-engine.md) | Custom fields without schema changes — JSONB + field definitions, dynamic forms |
+| **Template Engine** | [`16-template-engine.md`](./16-template-engine.md) | Document generation — Handlebars/PDF report cards, certificates, letters |
 
 ---
 
@@ -618,15 +558,11 @@ export class LeaveService {
 
 ---
 
-## 4.7 API Design Standards (Unchanged)
+## 4.6 API Design Standards
 
-### URL Convention
-
-```
-/api/v1/{tenant_id}/resource              # List/Create
-/api/v1/{tenant_id}/resource/{id}         # Get/Update/Delete
-/api/v1/{tenant_id}/resource/{id}/action  # Custom action
-```
+> **Canonical API standards:** See [`01-prd.md` §1.5a](./01-prd.md) for the complete API design standards including response format, module-scoped error codes, pagination, filtering/sorting conventions, idempotency, field conventions, backward compatibility, and OpenAPI enforcement.
+>
+> **Per-module endpoint contracts:** See [`08-api-contracts.md`](./08-api-contracts.md).
 
 ### Config API Endpoints (New)
 
@@ -638,13 +574,6 @@ POST   /api/v1/{tenant}/config/{schemaKey}/rollback     # Rollback to version
 GET    /api/v1/{tenant}/config/statuses/attendance       # Convenience: attendance statuses
 GET    /api/v1/{tenant}/config/grading/scale             # Convenience: grading scale
 GET    /api/v1/{tenant}/config/academic/calendar         # Convenience: academic calendar
-```
-
-### Standard Responses (Unchanged)
-
-```json
-{ "data": { ... }, "pagination": { "page": 1, "limit": 20, "total": 150, "total_pages": 8 } }
-{ "error": { "code": "VALIDATION_ERROR", "message": "...", "details": [...] } }
 ```
 
 ---
@@ -752,4 +681,243 @@ describe('Leave — Workflow Variability', () => {
 
 ---
 
-> **Next:** See [`05-frontend-spec.md`](./05-frontend-spec.md) for updated frontend specification.
+## 4.10 Backend-Admin UI
+
+The backend serves a **thin admin interface** via NestJS MVC (Handlebars templates) at `/admin`. This is NOT a customer-facing frontend — it is a configuration tool for Super Admins and School Admins to define per-tenant settings that drive all business modules.
+
+### Purpose
+
+- Configure attendance statuses, grading scales, academic calendars, and workflows **without code changes**
+- **Prove API consumability** — the admin UI uses the same REST APIs that customer frontends will consume
+- Enable Phase 0 exit: configure 3 diverse schools entirely through the UI
+
+### Technology
+
+| Aspect | Choice |
+|--------|--------|
+| **Renderer** | Handlebars (server-side templates via NestJS MVC) |
+| **Styling** | Minimal CSS (Tailwind via CDN in layout) — no React/Next.js dependency |
+| **Auth** | Same JWT + RBAC as API — `admin:config:read` / `admin:config:write` permissions |
+| **API Consumption** | Server-side HTTP calls to own REST endpoints (no client-side JS required) |
+
+### Pages
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| **Login** | `/admin/login` | Authenticate as Super Admin or School Admin |
+| **Dashboard** | `/admin` | Tenant selector + overview |
+| **Attendance Statuses** | `/admin/attendance-statuses` | Add/remove/reorder statuses, set code, label (i18n), color, icon, weight, is_present flag |
+| **Grading Scale** | `/admin/grading-scale` | Select mode (grade bands/percentage/GPA/rubric), define bands with labels, ranges, colors, grade points |
+| **Academic Calendar** | `/admin/academic-calendar` | Create academic years + terms, set dates, term types (semester/trimester/quarter) |
+| **Workflow Definitions** | `/admin/workflows` | View state machines, transitions, actor rules per workflow type |
+| **Rules Viewer** | `/admin/rules` | View rule sets, conditions, actions |
+| **Seed Templates** | `/admin/seed` | Load pre-built config templates (CBSE, ICSE, International) for new tenants |
+
+### Architecture Rule
+
+The admin UI **must never** contain business logic, direct database access, or bypass the API layer. Every data operation goes through the same REST endpoints that customer frontends use. This enforces API-first design.
+
+---
+
+## 4.11 Search Strategy
+
+### Current State
+
+The API standards (PRD §1.5a) define a `search` query parameter for basic full-text filtering, but no dedicated search architecture exists. Each module implements search independently.
+
+### Phased Strategy
+
+| Phase | Approach | Scope | Rationale |
+|-------|----------|-------|-----------|
+| **Phase 1-2** (MVP—50 tenants) | **PostgreSQL Full Text Search (FTS)** | Per-module search: students, teachers, homework | Zero operational overhead. Built into PostgreSQL. No additional infrastructure |
+| **Phase 3** (50-200 tenants) | **PostgreSQL FTS + GIN indexes + `tsvector` columns** | Global unified search across modules | Materialized `tsvector` columns for performance. Still no external dependency |
+| **Phase 4** (200+ tenants) | **OpenSearch** (only when needed) | Relevance-ranked search, faceted filtering, multi-language stemming | Introduced ONLY when PostgreSQL FTS proves insufficient for scale or relevance requirements |
+
+### Phase 1 Implementation: PostgreSQL FTS
+
+```sql
+-- Per-table search columns (Phase 1 — simple LIKE/ILIKE)
+-- Students table
+CREATE INDEX idx_students_name_search ON students USING gin (name gin_trgm_ops);
+
+-- Homework table  
+CREATE INDEX idx_homework_title_search ON homework USING gin (title gin_trgm_ops);
+```
+
+```typescript
+// Shared search utility
+@Injectable()
+export class SearchService {
+  constructor(private prisma: PrismaService) {}
+  
+  /**
+   * Phase 1-2: Simple ILIKE search with trigram indexes.
+   * Migrates to FTS tsvector in Phase 3.
+   */
+  async search<T>(
+    tenantId: string,
+    entity: string,
+    query: string,
+    fields: string[],
+    options?: { limit?: number; offset?: number }
+  ): Promise<{ data: T[]; total: number }> {
+    const where = {
+      tenant_id: tenantId,
+      deleted_at: null,
+      OR: fields.map(field => ({
+        [field]: { contains: query, mode: 'insensitive' as const }
+      }))
+    };
+    
+    const [data, total] = await Promise.all([
+      this.prisma[entity].findMany({ where, take: options?.limit ?? 20, skip: options?.offset ?? 0 }),
+      this.prisma[entity].count({ where })
+    ]);
+    
+    return { data, total };
+  }
+}
+```
+
+### Phase 3 Upgrade Path: PostgreSQL FTS with tsvector
+
+```sql
+-- Add tsvector column for full-text search
+ALTER TABLE students ADD COLUMN search_vector tsvector;
+
+-- Populate from multiple fields with weights
+UPDATE students SET search_vector = 
+  setweight(to_tsvector('english', coalesce(name, '')), 'A') ||
+  setweight(to_tsvector('english', coalesce(student_id_card, '')), 'B') ||
+  setweight(to_tsvector('english', coalesce(metadata->>'guardian_name', '')), 'C');
+
+-- GIN index for fast FTS
+CREATE INDEX idx_students_fts ON students USING gin (search_vector);
+
+-- Trigger to keep search_vector updated
+CREATE FUNCTION students_search_update() RETURNS trigger AS $$
+BEGIN
+  NEW.search_vector :=
+    setweight(to_tsvector('english', coalesce(NEW.name, '')), 'A') ||
+    setweight(to_tsvector('english', coalesce(NEW.student_id_card, '')), 'B');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_students_search BEFORE INSERT OR UPDATE ON students
+  FOR EACH ROW EXECUTE FUNCTION students_search_update();
+```
+
+### Phase 4 Trigger: When to Introduce OpenSearch
+
+**Only introduce OpenSearch when ALL of these conditions are met:**
+
+1. PostgreSQL FTS queries exceed 500ms p95 on indexed columns
+2. More than 50 concurrent search requests per second sustained
+3. Multi-language stemming required (Hindi, Marathi, etc.) beyond PostgreSQL dictionary support
+4. Faceted search required (filter by grade + subject + date range simultaneously)
+5. Relevance tuning needed beyond `ts_rank` capabilities
+
+**DO NOT introduce OpenSearch before these thresholds.** The operational cost (cluster management, index rebuilds, data sync) outweighs the benefit at early scale.
+
+### Search API Endpoints
+
+```
+GET /api/v1/{tenant}/search?q=rahul&entity=students&page=1&pageSize=20
+GET /api/v1/{tenant}/search?q=algebra&entity=homework&page=1&pageSize=20
+GET /api/v1/{tenant}/search?q=sharma&entity=all&page=1&pageSize=20       # Phase 3: unified search
+```
+
+### Security Constraint
+
+All search queries are tenant-scoped. `tenant_id` is always the first filter applied. Global search (Phase 3+) NEVER crosses tenant boundaries.
+
+---
+
+## 4.12 Backend AI Module
+
+The backend contains an **AI Module** for AI tasks triggered by backend operations (teacher clicks "Generate Homework" in the UI, backend auto-grades a submission, scheduled parent summary generation). This is different from the AI Chat Service which handles conversational interactions.
+
+### Distinction: Backend AI Module vs AI Chat Service
+
+| Aspect | Backend AI Module | AI Chat Service |
+|--------|------------------|------------------|
+| **Location** | Inside the NestJS backend (`server/src/modules/ai/`) | Separate repository (`ai_chat/`) |
+| **Triggered by** | Backend business logic (API handlers, BullMQ jobs) | User messages (Telegram, WhatsApp, WebChat) |
+| **Runs as** | Part of backend process (sync or async BullMQ job) | Standalone FastAPI service |
+| **Use cases** | Homework generation, auto-grading, report summaries, OCR | Conversational chatbot, intent classification, leave via chat |
+| **Data access** | Direct Prisma (same process) | Via backend REST APIs (x-api-key) |
+| **AI providers** | Same provider abstraction, same per-tenant config | Same provider abstraction, same per-tenant config |
+
+### AI Tasks in Backend
+
+| Task Code | Trigger | Implementation |
+|-----------|---------|----------------|
+| `homework.ai_generate` | Teacher clicks "AI Generate" in homework creation form | BullMQ job → AI provider → returns structured questions JSON |
+| `grading.auto_evaluate` | Teacher enables auto-grade on homework | BullMQ job per submission → AI provider → returns score + feedback |
+| `report.parent_summary` | Weekly scheduled cron job | BullMQ job per student → AI provider → returns narrative summary |
+| `ocr.extract_text` | Student submits handwritten homework photo | BullMQ job → AI provider (vision model) → returns extracted text |
+| `image.quality_check` | Student uploads homework image | Sync check → AI provider (vision model) → returns quality score |
+
+### Implementation
+
+```typescript
+// server/src/modules/ai/ai.module.ts
+@Module({
+  providers: [AITaskService, AIProviderRegistry, BullMQ],
+  exports: [AITaskService]
+})
+export class AIModule {}
+
+// server/src/modules/ai/ai-task.service.ts
+@Injectable()
+export class AITaskService {
+  constructor(
+    private providerRegistry: AIProviderRegistry,
+    private configEngine: ConfigurationEngine,
+    private jobQueue: BullMQ
+  ) {}
+  
+  /** Async — queued as BullMQ job */
+  async generateHomework(tenantId: string, params: GenerateHomeworkParams): Promise<string> {
+    const jobId = await this.jobQueue.add('ai.generate_homework', { tenantId, params });
+    return jobId; // Client polls for result or receives via WebSocket
+  }
+  
+  /** Async — queued as BullMQ job */
+  async autoGradeSubmission(tenantId: string, submissionId: string): Promise<string> {
+    const jobId = await this.jobQueue.add('ai.auto_grade', { tenantId, submissionId });
+    return jobId;
+  }
+  
+  /** Internal — executed by worker */
+  async executeGenerateHomework(job: Job): Promise<HomeworkResult> {
+    const config = await this.configEngine.get(job.data.tenantId, 'ai');
+    const provider = this.providerRegistry.getForTask(config, 'homework.ai_generate');
+    const taskDef = await this.getTaskDefinition(job.data.tenantId, 'homework.ai_generate');
+    
+    return provider.structured({
+      model: taskDef.model,
+      systemPrompt: this.renderTemplate(taskDef.system_prompt_template, job.data.params),
+      prompt: this.renderTemplate(taskDef.user_prompt_template, job.data.params),
+      schema: taskDef.output_schema,
+      temperature: taskDef.temperature
+    });
+  }
+}
+```
+
+### Shared AI Provider Configuration
+
+Both the Backend AI Module and the AI Chat Service use the **same per-tenant AI configuration** stored in the backend:
+
+- `ai_config.default_provider` — default provider for the tenant
+- `ai_config.model_mapping` — per-task provider/model selection
+- `ai_config.cost_limits` — daily/monthly budget
+- `ai_config.language` — primary language, supported languages
+
+The Backend AI Module reads this directly via `ConfigurationEngine`. The AI Chat Service reads it via the Config API (`GET /api/v1/{tenant}/config/ai`).
+
+---
+
+> **Next:** See [`05-frontend-spec.md`](./05-frontend-spec.md) for customer-facing frontend specification.

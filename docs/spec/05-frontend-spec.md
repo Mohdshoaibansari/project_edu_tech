@@ -1,11 +1,23 @@
 # 5. Frontend Specification
 
-> **Status:** Draft — Pre-Implementation  
-> **Last Updated:** 2026-06-05
+> **Spec ID:** SPEC-FRONTEND-001  
+> **Status:** Approved  
+> **Author:** Architecture & Engineering Team  
+> **Created:** 2026-06-05  
+> **Last Updated:** 2026-06-05  
+> **Related PRD Requirements:** All frontend-facing modules (AT-*, HW-*, EX-*, LV-*, DR-*, AD-*)
 
 ---
 
-## 5.1 Technology Stack
+## Summary
+
+Frontend implementation specification for EduTech. Per-tenant Next.js deployments consume shared backend APIs, dynamically adapt UI to each school's configuration (statuses, grading, workflows), and follow strict conventions for AI-agent friendly development, state management, and performance.
+
+> **Development standards** (module structure, state management, API layer isolation, DTO mapping, generated types, UX states, offline, component libraries, performance, auth patterns): See [`01-prd.md` §1.8 — Frontend Development Standards](./01-prd.md).
+
+---
+
+## Technology Stack
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
@@ -24,7 +36,7 @@
 
 ---
 
-## 5.2 Per-Client Customization Strategy
+## Per-Client Customization Strategy
 
 ### Architecture
 
@@ -81,16 +93,10 @@ class TenantConfigService {
   private config: TenantConfig | null = null;
   
   async bootstrap(tenantSlug: string): Promise<TenantConfig> {
-    // Fetch tenant config from API
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantSlug}/config`);
     this.config = await response.json();
-    
-    // Apply branding
     this.applyBranding(this.config.branding);
-    
-    // Apply feature flags
     this.applyFeatureFlags(this.config.features);
-    
     return this.config;
   }
   
@@ -99,8 +105,6 @@ class TenantConfigService {
     root.style.setProperty('--primary', branding.primary_color);
     root.style.setProperty('--secondary', branding.secondary_color);
     document.title = branding.school_name;
-    
-    // Set favicon
     const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
     if (favicon) favicon.href = branding.favicon_url;
   }
@@ -117,13 +121,10 @@ class TenantConfigService {
 /* globals.css */
 @layer base {
   :root {
-    /* These get overridden by tenant config */
-    --primary: 221.2 83.2% 53.3%;          /* Default blue */
+    --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    
-    /* School name for CSS content */
     --school-name: "EduTech";
   }
 }
@@ -131,18 +132,15 @@ class TenantConfigService {
 
 ---
 
-## 5.3 Dynamic Config-Driven UI ⭐ NEW
+## Dynamic Config-Driven UI ⭐
 
-### Principle: UI Adapts to Tenant Configuration
-
-**No hardcoded statuses, grades, or workflow steps in the UI.** Everything is rendered from the tenant configuration fetched at runtime.
+> **Principle:** No hardcoded statuses, grades, or workflow steps in the UI. Everything is rendered from the tenant configuration fetched at runtime.
 
 ### Dynamic Attendance Status Toggles
 
 ```typescript
 // modules/attendance/components/RollCallGrid.tsx
 export function RollCallGrid({ classId, date }: Props) {
-  // Fetch attendance statuses from Configuration Engine (NOT hardcoded!)
   const { data: statusConfig } = useAttendanceStatuses();
   const { data: records } = useAttendance(classId, date);
   
@@ -156,14 +154,13 @@ export function RollCallGrid({ classId, date }: Props) {
         <RollCallRow key={record.student_id}>
           <span>{record.student_name}</span>
           <div className="flex gap-1">
-            {/* Render toggles dynamically from config */}
             {statuses.map(status => (
               <StatusToggle
                 key={status.code}
                 active={record.status_code === status.code}
                 color={status.color}
-                icon={status.icon}           // 'check-circle', 'x-circle', 'clock'
-                label={status.label.en}       // i18n-aware
+                icon={status.icon}
+                label={status.label.en}
                 onClick={() => markAttendance(record.student_id, status.code)}
               />
             ))}
@@ -185,28 +182,19 @@ export function GradeDisplay({ score, maxScore, tenantId }: Props) {
   if (!gradingScale) return <Skeleton />;
   
   switch (gradingScale.type) {
-    case 'grade_bands':   // School A: Show A+, A, B+ badge
+    case 'grade_bands':
       const grade = findGradeBand(score, gradingScale.bands);
-      return (
-        <Badge style={{ backgroundColor: grade.color }}>
-          {grade.label}
-        </Badge>
-      );
+      return <Badge style={{ backgroundColor: grade.color }}>{grade.label}</Badge>;
     
-    case 'percentage':    // School B: Show 85% progress bar
+    case 'percentage':
       const pct = (score / maxScore) * 100;
-      return (
-        <div className="flex items-center gap-2">
-          <Progress value={pct} />
-          <span>{pct.toFixed(1)}%</span>
-        </div>
-      );
+      return <div className="flex items-center gap-2"><Progress value={pct} /><span>{pct.toFixed(1)}%</span></div>;
     
-    case 'gpa':           // School C: Show 3.7 GPA
+    case 'gpa':
       const gpa = calculateGPA(score, gradingScale);
       return <span className="text-2xl font-bold">{gpa.toFixed(1)}</span>;
     
-    case 'rubric':         // School D: Show rubric scores
+    case 'rubric':
       return <RubricDisplay criteria={gradingScale.criteria} scores={score} />;
     
     default:
@@ -220,13 +208,11 @@ export function GradeDisplay({ score, maxScore, tenantId }: Props) {
 ```typescript
 // shared/components/workflow/WorkflowStepper.tsx
 export function WorkflowStepper({ instanceId }: Props) {
-  // Fetch workflow status — transitions are tenant-defined, not hardcoded!
   const { data: status } = useWorkflowStatus(instanceId);
   const { data: transitions } = useAvailableTransitions(instanceId);
   
   return (
     <div>
-      {/* Render workflow history trail */}
       <ol className="space-y-2">
         {status?.history.map((step, i) => (
           <li key={i} className="flex items-center gap-2">
@@ -238,21 +224,13 @@ export function WorkflowStepper({ instanceId }: Props) {
           </li>
         ))}
       </ol>
-      
-      {/* Render available actions from Workflow Engine — configurable per school! */}
       <div className="flex gap-2 mt-4">
         {transitions?.map(t => (
-          <Button
-            key={t.id}
-            variant={t.name === 'Reject' ? 'destructive' : 'default'}
-            onClick={() => executeTransition(t.name)}
-          >
+          <Button key={t.id} variant={t.name === 'Reject' ? 'destructive' : 'default'}
+            onClick={() => executeTransition(t.name)}>
             {t.name}
           </Button>
         ))}
-        {/* School A shows: [Approve] [Reject] */}
-        {/* School B shows: [Forward to Coordinator] [Reject] */}
-        {/* School C shows: [Forward to Principal] [Reject]  (if ≤3 days, coordinator skipped) */}
       </div>
     </div>
   );
@@ -264,28 +242,19 @@ export function WorkflowStepper({ instanceId }: Props) {
 ```typescript
 // shared/forms/DynamicForm.tsx
 export function DynamicForm({ formCode, entityId, onSubmit }: Props) {
-  // Fetch form config from Metadata Engine — layout + fields are tenant-defined!
   const { data: formConfig } = useFormConfig(formCode);
-  
   if (!formConfig) return <Skeleton />;
   
   return (
     <Form {...form}>
       {formConfig.sections.map(section => {
-        // Check visibility condition
-        if (section.visibility_condition && !evaluateCondition(section.visibility_condition, values)) {
-          return null;
-        }
-        
+        if (section.visibility_condition && !evaluateCondition(section.visibility_condition, values)) return null;
         return (
           <fieldset key={section.title}>
             <legend>{section.title}</legend>
             {section.fields.map(field => (
-              <FormField
-                key={field.field_code}
-                name={field.field_code}
+              <FormField key={field.field_code} name={field.field_code}
                 render={({ field: formField }) => {
-                  // Render correct input based on field definition from Metadata Engine
                   switch (field.definition?.field_type) {
                     case 'string': return <Input {...formField} />;
                     case 'enum': return (
@@ -313,86 +282,23 @@ export function DynamicForm({ formCode, entityId, onSubmit }: Props) {
 
 ---
 
-## 5.4 Feature Module Structure
-
-Each feature module follows a consistent, AI-agent-friendly structure:
-
-```
-modules/attendance/
-├── pages/
-│   ├── AttendancePage.tsx           # Route-level page component
-│   ├── AttendanceHistoryPage.tsx
-│   └── AttendanceCorrectionPage.tsx
-├── components/
-│   ├── RollCallGrid.tsx             # Main attendance grid
-│   ├── RollCallRow.tsx              # Individual student row
-│   ├── StatusToggle.tsx             # Present/Absent/Tardy toggle
-│   ├── CorrectionRequestForm.tsx    # Correction request modal
-│   ├── AttendanceSummary.tsx        # Daily summary card
-│   └── AttendanceChart.tsx          # Trend chart
-├── hooks/
-│   ├── useAttendance.ts             # TanStack Query: fetch attendance
-│   ├── useMarkAttendance.ts         # TanStack Query: mark mutation
-│   └── useAttendanceStats.ts        # TanStack Query: statistics
-├── services/
-│   └── attendance.api.ts            # Generated API client calls
-├── types/
-│   └── attendance.types.ts          # Module-specific TypeScript types
-└── tests/
-    ├── RollCallGrid.test.tsx
-    └── useAttendance.test.ts
-```
-
-### Module Export Convention
-
-```typescript
-// modules/attendance/index.ts — Public API of the module
-export { AttendancePage } from './pages/AttendancePage';
-export { useAttendance } from './hooks/useAttendance';
-export type { AttendanceRecord } from './types/attendance.types';
-```
-
----
-
-## 5.5 Shared Design System
+## Shared Design System
 
 ### Component Library (shadcn/ui)
 
 ```
 shared/components/
 ├── ui/                    # shadcn/ui primitives (auto-generated)
-│   ├── button.tsx
-│   ├── card.tsx
-│   ├── dialog.tsx
-│   ├── dropdown-menu.tsx
-│   ├── input.tsx
-│   ├── select.tsx
-│   ├── table.tsx
-│   ├── tabs.tsx
-│   ├── toast.tsx
-│   └── ...
+│   ├── button.tsx, card.tsx, dialog.tsx, dropdown-menu.tsx
+│   ├── input.tsx, select.tsx, table.tsx, tabs.tsx, toast.tsx
 ├── layouts/               # Application layouts
-│   ├── DashboardLayout.tsx
-│   ├── Sidebar.tsx
-│   ├── Header.tsx
-│   ├── Breadcrumbs.tsx
-│   └── Shell.tsx
+│   ├── DashboardLayout.tsx, Sidebar.tsx, Header.tsx
 ├── feedback/              # Feedback components
-│   ├── LoadingSkeleton.tsx
-│   ├── EmptyState.tsx
-│   ├── ErrorState.tsx
-│   └── ConfirmDialog.tsx
+│   ├── LoadingSkeleton.tsx, EmptyState.tsx, ErrorState.tsx, ConfirmDialog.tsx
 ├── data/                  # Data display components
-│   ├── DataTable.tsx       # Reusable TanStack Table wrapper
-│   ├── DataCard.tsx
-│   ├── MetricCard.tsx
-│   ├── StatusBadge.tsx
-│   └── ChartContainer.tsx
+│   ├── DataTable.tsx, MetricCard.tsx, StatusBadge.tsx, ChartContainer.tsx
 └── forms/                 # Form framework
-    ├── FormField.tsx
-    ├── FormSelect.tsx
-    ├── FormDatePicker.tsx
-    └── FormFileUpload.tsx
+    ├── FormField.tsx, FormSelect.tsx, FormDatePicker.tsx, FormFileUpload.tsx
 ```
 
 ### Reusable DataTable Component
@@ -408,148 +314,27 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   pagination?: PaginationState;
   sorting?: SortingState;
-  // ... extensible
-}
-
-// Usage in any module
-<DataTable
-  data={students}
-  columns={studentColumns}
-  isLoading={isLoading}
-  isEmpty={students.length === 0}
-  emptyMessage="No students found in this class"
-  pagination={pagination}
-/>
-```
-
----
-
-## 5.6 State Management
-
-### Server State (TanStack Query)
-
-All data from the backend API is managed by TanStack Query:
-
-```typescript
-// hooks/useAttendance.ts
-export function useAttendance(classId: string, date: string) {
-  return useQuery({
-    queryKey: ['attendance', classId, date],
-    queryFn: () => attendanceApi.getAttendance(classId, date),
-    staleTime: 5 * 60 * 1000,  // 5 minutes
-  });
-}
-
-// Mutation with optimistic update
-export function useMarkAttendance() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: attendanceApi.markAttendance,
-    onMutate: async (newAttendance) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['attendance', newAttendance.classId] });
-      
-      // Snapshot previous value
-      const previous = queryClient.getQueryData(['attendance', newAttendance.classId]);
-      
-      // Optimistically update
-      queryClient.setQueryData(['attendance', newAttendance.classId], (old) => 
-        old.map(a => a.studentId === newAttendance.studentId 
-          ? { ...a, status: newAttendance.status } 
-          : a
-        )
-      );
-      
-      return { previous };
-    },
-    onError: (err, newAttendance, context) => {
-      // Rollback
-      queryClient.setQueryData(['attendance', newAttendance.classId], context.previous);
-      toast.error('Failed to mark attendance. Please try again.');
-    },
-    onSettled: (data, error, variables) => {
-      // Invalidate to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ['attendance', variables.classId] });
-    },
-  });
-}
-```
-
-### UI State (Zustand)
-
-Only UI-only state in Zustand — never server data:
-
-```typescript
-// store/ui.store.ts
-interface UIState {
-  sidebarOpen: boolean;
-  theme: 'light' | 'dark' | 'system';
-  notificationsPanelOpen: boolean;
-  
-  toggleSidebar: () => void;
-  setTheme: (theme: 'light' | 'dark' | 'system') => void;
-  toggleNotifications: () => void;
-}
-
-// store/auth.store.ts (UI state only — actual auth is cookie-based)
-interface AuthUIState {
-  isAuthenticated: boolean;
-  user: User | null;
-  permissions: string[];
-  tenantConfig: TenantConfig | null;
-  
-  setUser: (user: User) => void;
-  setPermissions: (permissions: string[]) => void;
-  clearAuth: () => void;
-  hasPermission: (permission: string) => boolean;
-  isFeatureEnabled: (feature: string) => boolean;
 }
 ```
 
 ---
 
-## 5.7 Feature Flag Rendering
+## Feature Flag Rendering
 
 ```typescript
 // components/FeatureGate.tsx
-export function FeatureGate({ 
-  feature, 
-  children, 
-  fallback = null 
-}: { 
-  feature: string; 
-  children: React.ReactNode; 
-  fallback?: React.ReactNode;
+export function FeatureGate({ feature, children, fallback = null }: {
+  feature: string; children: React.ReactNode; fallback?: React.ReactNode;
 }) {
   const isEnabled = useFeatureFlag(feature);
-  
   if (!isEnabled) return fallback;
   return <>{children}</>;
 }
 
-// Usage
-<FeatureGate feature="ai_homework_generator">
-  <Button onClick={handleAIGenerate}>
-    <SparklesIcon /> AI Generate Homework
-  </Button>
-</FeatureGate>
-```
-
-### Permission-Based UI (UX Only — Backend Enforces)
-
-```typescript
-export function PermissionGate({
-  permission,
-  children,
-  fallback = null
-}: {
-  permission: string;
-  children: React.ReactNode;
-  fallback?: React.ReactNode;
+export function PermissionGate({ permission, children, fallback = null }: {
+  permission: string; children: React.ReactNode; fallback?: React.ReactNode;
 }) {
   const hasPermission = usePermission(permission);
-  
   if (!hasPermission) return fallback;
   return <>{children}</>;
 }
@@ -557,39 +342,23 @@ export function PermissionGate({
 
 ---
 
-## 5.8 Generated API Client
+## Generated API Client
 
 ### Contract-First Approach
 
-1. Backend team writes OpenAPI spec
-2. CI runs `openapi-generator-cli` to generate TypeScript client
-3. Frontend imports typed functions
+1. Backend defines OpenAPI spec
+2. CI runs `openapi-generator-cli` → TypeScript client
+3. Frontend imports typed functions from `generated/` directory
 
 ```typescript
 // Generated: shared/api/generated/attendance.ts
-export async function getAttendance(
-  tenantId: string,
-  classId: string,
-  date: string,
-  options?: RequestOptions
-): Promise<AttendanceListResponse> { ... }
+export async function getAttendance(tenantId: string, classId: string, date: string): Promise<AttendanceListResponse> { ... }
+export async function markAttendance(tenantId: string, body: CreateAttendanceRequest): Promise<AttendanceResponse> { ... }
 
-export async function markAttendance(
-  tenantId: string,
-  body: CreateAttendanceRequest,
-  options?: RequestOptions
-): Promise<AttendanceResponse> { ... }
-```
-
-### Consumption
-
-```typescript
-// modules/attendance/hooks/useAttendance.ts
+// Consumption via TanStack Query hook
 import { getAttendance } from '@/shared/api/generated/attendance';
 
 export function useAttendance(classId: string, date: string) {
-  const { tenantSlug } = useTenant();
-  
   return useQuery({
     queryKey: ['attendance', classId, date],
     queryFn: () => getAttendance(tenantSlug, classId, date),
@@ -599,39 +368,15 @@ export function useAttendance(classId: string, date: string) {
 
 ---
 
-## 5.9 States Every Component Must Handle
+## Cross-References
 
-| State | Visual | Implementation |
-|-------|--------|---------------|
-| **Loading** | Skeleton | `if (isLoading) return <LoadingSkeleton />` |
-| **Empty** | Illustration + message + CTA | `if (!data?.length) return <EmptyState />` |
-| **Error** | Error card + retry button | `if (error) return <ErrorState onRetry={refetch} />` |
-| **Success** | Populated UI | Render data |
-| **Optimistic** | Immediate UI feedback | TanStack Query `onMutate` |
-| **Offline** | Banner + queued indicator | Check `navigator.onLine` |
-
----
-
-## 5.10 Accessibility Standards
-
-- Semantic HTML: `<header>`, `<nav>`, `<main>`, `<section>`, `<article>`
-- All form inputs have associated `<label>`
-- Icon-only buttons have `aria-label`
-- Modals trap focus and close on Escape
-- Color contrast ≥ 4.5:1 (tested with axe DevTools)
-- Keyboard navigation: Tab order is logical, Enter/Space for actions
-- Screen reader: `aria-live` regions for dynamic content
-
----
-
-## 5.11 Performance Standards
-
-- Route-level code splitting (Next.js automatic)
-- Images: `next/image` with lazy loading, WebP format
-- Lists > 50 items: use `react-virtuoso` or TanStack Virtual
-- `useMemo` / `useCallback` on expensive computations
-- `React.memo` on pure presentational components
-- Lighthouse target: Performance ≥ 90
+| Topic | Canonical Document |
+|-------|-------------------|
+| **Frontend Development Standards** (module structure, state management, API layer, DTO mapping, types, UX, offline, performance, auth) | [`01-prd.md` §1.8](./01-prd.md) |
+| **Testing Strategy** (unit, integration, E2E) | [`01-prd.md` §1.9a](./01-prd.md) |
+| **API Contracts** (per-module endpoints) | [`08-api-contracts.md`](./08-api-contracts.md) |
+| **Authentication & Authorization** | [`06-auth-spec.md`](./06-auth-spec.md) |
+| **System Architecture** (high-level, deployment) | [`03-architecture.md`](./03-architecture.md) |
 
 ---
 

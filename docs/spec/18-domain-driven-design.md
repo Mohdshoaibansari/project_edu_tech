@@ -148,14 +148,72 @@ modules/
 | **Public API** | ConfigurationService, RulesEngine, WorkflowEngine, MetadataEngine, TemplateEngine |
 | **Does NOT depend on** | Any business context — it's generic infrastructure |
 
-### 8. Reporting Context (Cross-Cutting)
+### 8. Reporting Context (Cross-Cutting) — DEFERRED
 
 | Aspect | Description |
 |--------|-------------|
-| **Responsibility** | Report generation, analytics, data export, dashboards |
-| **Aggregates** | `Report`, `Dashboard`, `Export`, `GeneratedDocument` |
-| **Ubiquitous Language** | Report, Dashboard, Export, Chart, Metric, KPI, Filter, Date Range |
+| **Responsibility** | Report generation, analytics, data export, dashboards, cross-year trends, performance metrics |
+| **Aggregates** | `Report`, `Dashboard`, `Export`, `GeneratedDocument`, `AnalyticsView` |
+| **Ubiquitous Language** | Report, Dashboard, Export, Chart, Metric, KPI, Filter, Date Range, Snapshot, Trend, Cohort |
 | **Depends on** | ALL business contexts (reads data, never writes), Template Engine (for formatted output) |
+
+#### Phased Build Strategy
+
+| Phase | Capability | Implementation |
+|-------|-----------|---------------|
+| **Phase 1** (with business modules) | Basic dashboards + CSV/Excel/PDF exports. Direct query from transactional DB via Prisma | Simple — no isolation needed at this scale |
+| **Phase 3** (with advanced engines) | Cross-year analytics, attendance trends, teacher performance, student growth. Scheduled report generation | Introduce **read replica** — reporting queries hit replica, not primary |
+| **Phase 4** (enterprise) | Advanced analytics, custom report builder, data warehouse integration | Dedicated **analytics database** (materialized views, pre-aggregated cubes) |
+
+#### Database Isolation Rule
+
+> **Intensive analytical queries MUST never run against transactional (OLTP) tables.**
+
+This prevents reporting workloads from:
+- Competing with attendance marking, homework submission, and other real-time operations
+- Causing lock contention on heavily-written tables
+- Degrading API response times during report generation
+
+**Isolation strategy per phase:**
+
+```
+Phase 1: Shared DB (acceptable for < 100 tenants, < 10 concurrent reports)
+  ┌──────────────┐
+  │  PostgreSQL  │  ← All queries (OLTP + OLAP) hit same DB
+  │  (Primary)   │
+  └──────────────┘
+
+Phase 3: Read Replica isolation
+  ┌──────────────┐     ┌──────────────┐
+  │  PostgreSQL  │────▶│  PostgreSQL  │
+  │  (Primary)   │     │  (Read        │  ← Reporting queries only
+  │  OLTP writes │     │   Replica)    │
+  └──────────────┘     └──────────────┘
+
+Phase 4: Analytics DB (materialized views + pre-aggregation)
+  ┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
+  │  PostgreSQL  │────▶│  PostgreSQL  │────▶│  Analytics DB    │
+  │  (Primary)   │     │  (Replica)   │     │  (Materialized   │
+  │              │     │              │     │   Views + Cubes) │
+  └──────────────┘     └──────────────┘     └──────────────────┘
+```
+
+#### Reporting Data Patterns
+
+| Pattern | Use Case | Implementation |
+|---------|----------|---------------|
+| **Live dashboard** | Teacher sees today's attendance | Direct query, cached 60s |
+| **Periodic snapshot** | Monthly attendance report | Background job (BullMQ) generates snapshot to `report_snapshots` table |
+| **Pre-aggregated metric** | School-wide attendance rate | Materialized view refreshed hourly |
+| **Cross-year analysis** | Student growth from Grade 5→6 | Read replica query joining historical academic years |
+| **Export** | Download attendance as Excel | Background job generates file → signed URL → download |
+
+#### Anti-Patterns (Prohibited)
+
+- ❌ `SELECT COUNT(*) FROM attendance` without date range on every dashboard load
+- ❌ Joining 5 tables with `GROUP BY` on transactional tables during peak hours
+- ❌ Generating PDF reports synchronously in API handlers
+- ❌ Running `EXPLAIN ANALYZE`-heavy queries on the primary at 8 AM (attendance rush hour)
 
 ---
 
@@ -315,4 +373,4 @@ server/src/
 
 ---
 
-> **Next:** See [`19-ai-readiness.md`](./19-ai-readiness.md) for AI Readiness Assessment.
+> **Next:** See [`20-extensibility-migration.md`](./20-extensibility-migration.md) for Extensibility Review & Migration Plan.
