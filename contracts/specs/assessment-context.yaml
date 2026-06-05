@@ -132,7 +132,7 @@ paths:
                         grade: { type: string }
                         grade_point: { type: number }
 
-  /{tenantId}/grading/convert:
+  /{tenantId}/exams/convert-score:
     post:
       tags: [Grading]
       summary: Convert score to grade using tenant's grading rules
@@ -166,7 +166,7 @@ paths:
                       percentage: { type: number }
                       grade_point: { type: number }
 
-  /{tenantId}/grading/calculate-gpa:
+  /{tenantId}/exams/calculate-gpa:
     post:
       tags: [Grading]
       summary: Calculate GPA from subject results
@@ -204,7 +204,7 @@ paths:
                     properties:
                       gpa: { type: number }
 
-  /{tenantId}/promotion/check/{studentId}:
+  /{tenantId}/exams/promotion/{studentId}:
     get:
       tags: [Promotion]
       summary: Check promotion eligibility via RulesEngine

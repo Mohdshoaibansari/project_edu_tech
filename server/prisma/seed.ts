@@ -227,15 +227,24 @@ async function main() {
   // 8. ACADEMIC CALENDAR — 3 different term systems
   // =========================================================================
 
+  // Clean up existing academic years (idempotent re-run)
+  await prisma.academicTerm.deleteMany({ where: { academic_year: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } } });
+  await prisma.academicYear.deleteMany({ where: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } });
+
   // School A: Semester system
-  const yearA = await prisma.academicYear.create({
-    data: {
+  const yearA = await prisma.academicYear.upsert({
+    where: { id: 'year-school-a-00000000000000000001' },
+    update: {},
+    create: {
+      id: 'year-school-a-00000000000000000001',
       tenant_id: schoolA.id,
       name: '2026-2027',
       start_date: new Date('2026-06-01'),
       end_date: new Date('2027-05-31'),
     },
   });
+  // Delete existing terms and recreate (idempotent)
+  await prisma.academicTerm.deleteMany({ where: { academic_year_id: yearA.id } });
   await prisma.academicTerm.createMany({
     data: [
       { academic_year_id: yearA.id, code: 'SEM1', name: 'Semester 1', start_date: new Date('2026-06-01'), end_date: new Date('2026-11-30'), term_type: 'semester', sort_order: 1 },
@@ -244,14 +253,18 @@ async function main() {
   });
 
   // School B: Trimester system
-  const yearB = await prisma.academicYear.create({
-    data: {
+  const yearB = await prisma.academicYear.upsert({
+    where: { id: 'year-school-b-00000000000000000002' },
+    update: {},
+    create: {
+      id: 'year-school-b-00000000000000000002',
       tenant_id: schoolB.id,
       name: '2026-2027',
       start_date: new Date('2026-06-01'),
       end_date: new Date('2027-05-31'),
     },
   });
+  await prisma.academicTerm.deleteMany({ where: { academic_year_id: yearB.id } });
   await prisma.academicTerm.createMany({
     data: [
       { academic_year_id: yearB.id, code: 'TRI1', name: 'Trimester 1', start_date: new Date('2026-06-01'), end_date: new Date('2026-09-30'), term_type: 'trimester', sort_order: 1 },
@@ -261,14 +274,18 @@ async function main() {
   });
 
   // School C: Quarterly system
-  const yearC = await prisma.academicYear.create({
-    data: {
+  const yearC = await prisma.academicYear.upsert({
+    where: { id: 'year-school-c-00000000000000000003' },
+    update: {},
+    create: {
+      id: 'year-school-c-00000000000000000003',
       tenant_id: schoolC.id,
       name: '2026-2027',
       start_date: new Date('2026-09-01'),
       end_date: new Date('2027-06-30'),
     },
   });
+  await prisma.academicTerm.deleteMany({ where: { academic_year_id: yearC.id } });
   await prisma.academicTerm.createMany({
     data: [
       { academic_year_id: yearC.id, code: 'Q1', name: 'Quarter 1', start_date: new Date('2026-09-01'), end_date: new Date('2026-11-15'), term_type: 'quarter', sort_order: 1 },
@@ -492,6 +509,12 @@ async function main() {
   // 13. WORKFLOWS — 3 different leave approval chains
   // =========================================================================
 
+  // Clean up existing workflows (idempotent re-run)
+  await prisma.workflowTransition.deleteMany({ where: { workflow: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } } });
+  await prisma.workflowState.deleteMany({ where: { workflow: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } } });
+  await prisma.workflowInstance.deleteMany({ where: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } });
+  await prisma.workflowDefinition.deleteMany({ where: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } });
+
   // School A: Teacher → Principal (2-step)
   const wfA = await prisma.workflowDefinition.create({
     data: {
@@ -604,7 +627,191 @@ async function main() {
   console.log('✅ Workflows: School A (2-step), School B (3-step), School C (conditional)');
 
   // =========================================================================
-  // 14. CONFIG SCHEMAS — Define the valid configuration schemas
+  // 14. RULE SETS — Grading, Attendance, Promotion rules per school
+  // =========================================================================
+
+  // Clean up existing rules (idempotent re-run)
+  await prisma.rule.deleteMany({ where: { ruleSet: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } } });
+  await prisma.ruleSet.deleteMany({ where: { tenant_id: { in: [schoolA.id, schoolB.id, schoolC.id] } } });
+
+  // --- School A: Grade Bands rule ---
+  const rsGradingA = await prisma.ruleSet.create({
+    data: {
+      tenant_id: schoolA.id,
+      code: 'grading.convert_score',
+      name: 'Grade Bands Conversion',
+      description: 'Convert numeric score to grade band (A+ to F)',
+    },
+  });
+  await prisma.rule.createMany({
+    data: [
+      {
+        rule_set_id: rsGradingA.id, priority: 1, name: 'Score → Grade Band',
+        condition: { always: true },
+        action: {
+          type: 'GRADE_BAND_MATCH',
+          bands_source: 'tenant_config:grading.scale.bands',
+          input_score: '{{score}}',
+          output_grade_field: 'grade',
+          output_grade_point_field: 'grade_point',
+          fallback: { grade: 'N/A', grade_point: 0 },
+        },
+      },
+    ],
+  });
+
+  // --- School B: Percentage rule ---
+  const rsGradingB = await prisma.ruleSet.create({
+    data: {
+      tenant_id: schoolB.id,
+      code: 'grading.convert_score',
+      name: 'Percentage Conversion',
+      description: 'Convert score to percentage and assign distinction/pass/fail',
+    },
+  });
+  await prisma.rule.createMany({
+    data: [
+      {
+        rule_set_id: rsGradingB.id, priority: 1, name: 'Score → Percentage',
+        condition: { always: true },
+        action: {
+          type: 'PERCENTAGE_CALC',
+          score_input: '{{score}}',
+          max_score_input: '{{max_score}}',
+          distinction_threshold: 'tenant_config:grading.scale.distinction_percentage',
+          pass_threshold: 'tenant_config:grading.scale.pass_percentage',
+          output_percentage_field: 'grade',
+          output_grade_point_field: 'grade_point',
+        },
+      },
+    ],
+  });
+
+  // --- School C: GPA rule ---
+  const rsGradingC = await prisma.ruleSet.create({
+    data: {
+      tenant_id: schoolC.id,
+      code: 'grading.convert_score',
+      name: 'GPA Conversion',
+      description: 'Map grade points to GPA letter grades',
+    },
+  });
+  await prisma.rule.createMany({
+    data: [
+      {
+        rule_set_id: rsGradingC.id, priority: 1, name: 'Grade Point → GPA Band',
+        condition: { always: true },
+        action: {
+          type: 'GPA_BAND_MATCH',
+          bands_source: 'tenant_config:grading.scale.bands',
+          input_grade_point: '{{grade_point}}',
+          output_grade_field: 'grade',
+          output_grade_point_field: 'grade_point',
+        },
+      },
+    ],
+  });
+
+  // --- All Schools: Attendance Rate Calculation ---
+  for (const tenant of [schoolA, schoolB, schoolC]) {
+    const rs = await prisma.ruleSet.create({
+      data: {
+        tenant_id: tenant.id,
+        code: 'attendance.calculate_rate',
+        name: 'Attendance Rate Calculation',
+        description: 'Weighted attendance rate from status records',
+      },
+    });
+    await prisma.rule.createMany({
+      data: [
+        {
+          rule_set_id: rs.id, priority: 1, name: 'Weighted Rate',
+          condition: { records_count_gt: 0 },
+          action: {
+            type: 'WEIGHTED_AVERAGE',
+            weight_field: 'weight',
+            records_input: '{{records}}',
+            output_field: 'rate',
+          },
+        },
+        {
+          rule_set_id: rs.id, priority: 99, name: 'No Records Fallback',
+          condition: { records_count_eq: 0 },
+          action: { type: 'CONSTANT', value: 0, output_field: 'rate' },
+        },
+      ],
+    });
+  }
+
+  // --- All Schools: Promotion Eligibility ---
+  for (const tenant of [schoolA, schoolB, schoolC]) {
+    const rs = await prisma.ruleSet.create({
+      data: {
+        tenant_id: tenant.id,
+        code: 'promotion.eligibility',
+        name: 'Promotion Eligibility',
+        description: 'Check if student meets promotion criteria',
+      },
+    });
+    await prisma.rule.createMany({
+      data: [
+        {
+          rule_set_id: rs.id, priority: 1, name: 'Minimum Attendance Check',
+          condition: { field: 'attendance_rate', operator: 'lt', value: 75 },
+          action: { type: 'RESULT', eligible: false, reason: 'Attendance below 75%' },
+        },
+        {
+          rule_set_id: rs.id, priority: 2, name: 'Minimum GPA Check',
+          condition: { field: 'gpa', operator: 'lt', value: 2.0 },
+          action: { type: 'RESULT', eligible: false, reason: 'GPA below 2.0' },
+        },
+        {
+          rule_set_id: rs.id, priority: 99, name: 'Default Eligible',
+          condition: { always: true },
+          action: { type: 'RESULT', eligible: true, reason: 'Meets all criteria' },
+        },
+      ],
+    });
+  }
+  console.log('✅ Rule sets: grading.convert_score (3 school variants), attendance.calculate_rate, promotion.eligibility');
+
+  // =========================================================================
+  // 15. ATTENDANCE CORRECTION WORKFLOW — All 3 schools
+  // =========================================================================
+  for (const tenant of [schoolA, schoolB, schoolC]) {
+    const wfCorr = await prisma.workflowDefinition.create({
+      data: {
+        tenant_id: tenant.id,
+        code: 'attendance_correction',
+        name: 'Attendance Correction',
+        description: 'Teacher requests correction → Principal approves/rejects',
+        states: {
+          create: [
+            { code: 'PENDING', name: 'Pending Review', is_initial: true, sort_order: 1 },
+            { code: 'WITH_PRINCIPAL', name: 'With Principal', sort_order: 2 },
+            { code: 'APPROVED', name: 'Approved', is_final: true, color: '#10B981', sort_order: 3 },
+            { code: 'REJECTED', name: 'Rejected', is_final: true, color: '#EF4444', sort_order: 4 },
+          ],
+        },
+      },
+      include: { states: true },
+    });
+
+    const corrStates: Record<string, string> = {};
+    wfCorr.states.forEach(s => { corrStates[s.code] = s.id; });
+
+    await prisma.workflowTransition.createMany({
+      data: [
+        { workflow_id: wfCorr.id, from_state_id: corrStates.PENDING, to_state_id: corrStates.WITH_PRINCIPAL, name: 'Request Correction', actor_roles: ['TEACHER'], actor_type: 'role', sort_order: 1 },
+        { workflow_id: wfCorr.id, from_state_id: corrStates.WITH_PRINCIPAL, to_state_id: corrStates.APPROVED, name: 'Approve', actor_roles: ['PRINCIPAL'], actor_type: 'role', sort_order: 2 },
+        { workflow_id: wfCorr.id, from_state_id: corrStates.WITH_PRINCIPAL, to_state_id: corrStates.REJECTED, name: 'Reject', actor_roles: ['PRINCIPAL'], actor_type: 'role', sort_order: 3 },
+      ],
+    });
+  }
+  console.log('✅ Attendance correction workflow created for all 3 schools');
+
+  // =========================================================================
+  // 16. CONFIG SCHEMAS — Define the valid configuration schemas
   // =========================================================================
   const configSchemas = [
     {

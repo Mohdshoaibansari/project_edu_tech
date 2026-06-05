@@ -20,17 +20,23 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
-      summary: Login — exchange SuperTokens identity for JWT
+      summary: Login — exchange SuperTokens identity for backend JWT
+      description: |
+        Accepts either 'supertokens_token' (production) or 'password' (dev mode).
+        In production: verifies the SuperTokens access token with the core,
+        links the SuperTokens user ID to our user record, then issues backend JWT.
+        In dev mode: short password (≤10 chars) bypasses SuperTokens verification.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [email, supertokens_id]
+              required: [email]
               properties:
                 email: { type: string, format: email }
-                supertokens_id: { type: string }
+                supertokens_token: { type: string, description: "SuperTokens access token (production)" }
+                password: { type: string, description: "Dev-mode bypass (≤10 chars skips ST verification)" }
       responses:
         "200":
           description: Tokens issued

@@ -8,8 +8,10 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() body: { email: string; password: string }, @Res({ passthrough: true }) res: Response) {
-    const { user, tokens } = await this.jwtService.login(body.email, body.password);
+  async login(@Body() body: { email: string; supertokens_token?: string; password?: string }, @Res({ passthrough: true }) res: Response) {
+    // Accept both 'supertokens_token' (production) and 'password' (dev fallback)
+    const stToken = body.supertokens_token || body.password || '';
+    const { user, tokens } = await this.jwtService.login(body.email, stToken);
 
     // Set refresh token as HttpOnly cookie
     res.cookie('refresh_token', tokens.refreshToken, {

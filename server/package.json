@@ -39,6 +39,7 @@
     "jose": "^6.2.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "supertokens-node": "^24.0.2",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

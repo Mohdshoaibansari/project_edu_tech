@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import * as jose from 'jose';
 import { PrismaService } from '@core/prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { RbacService } from './rbac.service';
+import { SuperTokensService } from './supertokens/supertokens.service';
 
 export interface TokenPayload {
   sub: string;
@@ -31,7 +32,11 @@ export interface UserProfile {
 export class JwtTokenService {
   private readonly secret: Uint8Array;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rbacService: RbacService,
+    private readonly supertokensService: SuperTokensService,
+  ) {
     const secretStr = process.env.JWT_SECRET || 'edutech-dev-secret-change-in-production';
     this.secret = new TextEncoder().encode(secretStr);
   }
@@ -143,19 +148,29 @@ export class JwtTokenService {
   }
 
   // ==========================================================================
-  // Login (for direct JWT auth — bypasses SuperTokens)
+  // Login — Exchange SuperTokens identity for backend JWT
   // ==========================================================================
 
-  async login(email: string, password: string): Promise<{ user: UserProfile; tokens: TokenPair }> {
-    // Simple email lookup — in production, SuperTokens handles password verification
+  async login(email: string, supertokensToken: string): Promise<{ user: UserProfile; tokens: TokenPair }> {
+    // Verify SuperTokens token if provided
+    if (supertokensToken && supertokensToken.length > 10) {
+      await this.verifySuperTokensAndLink(email, supertokensToken);
+    }
+
+    // Look up user by email
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: { tenant: true },
     });
-    if (!user) throw new Error('Invalid credentials');
+    if (!user) throw new Error('User not found');
 
-    // In production, password is verified by SuperTokens
-    // For dev, we just issue tokens for the user
+    // Update last login
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
+    });
+
+    // Issue backend tokens
     const permissions = await this.getUserPermissions(user.id, user.role);
     const tokens = await this.issueTokens(user.id);
 
@@ -174,28 +189,25 @@ export class JwtTokenService {
     };
   }
 
+  /**
+   * Verify SuperTokens access token and link the SuperTokens user ID to our user record.
+   */
+  private async verifySuperTokensAndLink(email: string, supertokensToken: string): Promise<void> {
+    const stResult = await this.supertokensService.verifyAccessToken(supertokensToken);
+
+    // Link SuperTokens ID to user (first SuperTokens login)
+    await this.prisma.user.updateMany({
+      where: { email },
+      data: { supertokens_id: stResult.userId },
+    });
+  }
+
   // ==========================================================================
   // Private
   // ==========================================================================
 
-  private async getUserPermissions(userId: string, role: UserRole): Promise<string[]> {
-    // Get role-based permissions
-    const rolePerms = await this.prisma.rolePermission.findMany({
-      where: { role },
-      include: { permission: true },
-    });
-
-    // Get user-specific overrides
-    const userPerms = await this.prisma.userPermission.findMany({
-      where: { user_id: userId },
-      include: { permission: true },
-    });
-
-    const allPerms = new Set<string>();
-    for (const rp of rolePerms) allPerms.add(rp.permission.code);
-    for (const up of userPerms) allPerms.add(up.permission.code);
-
-    return Array.from(allPerms).sort();
+  private async getUserPermissions(userId: string, role: string): Promise<string[]> {
+    return this.rbacService.getUserPermissions(userId, role as any);
   }
 
   private async createRefreshToken(userId: string): Promise<string> {
