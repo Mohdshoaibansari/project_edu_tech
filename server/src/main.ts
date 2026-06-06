@@ -15,8 +15,10 @@ async function bootstrap() {
   app.use(compression());
   app.use(cookieParser());
 
+  // CORS — parametrized via CORS_ORIGINS env var (comma-separated origins).
+  // Default allows both frontend (3001) and backend (3000) for local dev.
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') ?? ['http://localhost:3000'],
+    origin: process.env.CORS_ORIGINS?.split(',') ?? ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
   });
 
