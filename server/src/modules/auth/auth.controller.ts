@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Req, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { JwtTokenService } from './jwt-token.service';
 
@@ -86,7 +86,7 @@ export class AuthController {
     // Extract user from JWT (in production, this comes from AuthGuard)
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new Error('UNAUTHORIZED');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const token = authHeader.substring(7);

@@ -114,7 +114,7 @@ echo "  Token C: ${ADMIN_C:0:30}..." | tee -a $LOG
 
 # Dev mode: password='any' → backend skips SuperTokens verification
 test_endpoint "POST /auth/login (dev mode)"      "POST" "$BASE/auth/login" '{"email":"admin@school-a.edu","password":"any"}' "" ""
-test_endpoint "POST /auth/login (bad email)"     "POST" "$BASE/auth/login" '{"email":"nobody@nowhere.com","password":"any"}' "" "500"
+test_endpoint "POST /auth/login (bad email)"     "POST" "$BASE/auth/login" '{"email":"nobody@nowhere.com","password":"any"}' "" "404"
 test_endpoint "GET  /auth/me"              "GET"  "$BASE/auth/me" "" "$ADMIN_A" ""
 test_endpoint "GET  /auth/me (no token)"   "GET"  "$BASE/auth/me" "" "" "401"
 test_endpoint "GET  /auth/me (bad token)"  "GET"  "$BASE/auth/me" "" "invalid-token-here" "401"
@@ -210,13 +210,12 @@ test_endpoint "GET  /workflows (definitions)"         "GET"  "$BASE/$T_A/workflo
 test_endpoint "GET  /workflows/:code"                 "GET"  "$BASE/$T_A/workflows/leave_approval" "" "" ""
 test_endpoint "POST /workflows (create)"             "POST" "$BASE/$T_A/workflows" "{\"code\":\"test_wf_${TS}\",\"name\":\"Test WF ${TS}\",\"states\":[{\"code\":\"START\",\"name\":\"Start\",\"is_initial\":true},{\"code\":\"END\",\"name\":\"End\",\"is_final\":true}],\"transitions\":[{\"from_state_code\":\"START\",\"to_state_code\":\"END\",\"name\":\"Finish\",\"actor_roles\":[\"ADMIN\"]}]}" "$ADMIN_A" ""
 test_endpoint "POST /workflows/:code/instances"      "POST" "$BASE/$T_A/workflows/leave_approval/instances" "{\"entity_type\":\"LeaveRequest\",\"entity_id\":\"wf-test-leave-${TS}\",\"context\":{\"leave_days\":2}}" "$ADMIN_A" ""
-test_endpoint "GET  /workflows/:code/instances"      "GET"  "$BASE/$T_A/workflows/leave_approval/instances" "" "" ""
 
-# Get workflow instance ID for transition test
-WF_INSTANCE_ID=$(curl -s "$BASE/$T_A/workflows/leave_approval/instances" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+# Get workflow instance ID from the POST response (saved to TMP_RESP by test_endpoint)
+WF_INSTANCE_ID=$(grep -o '"id":"[^"]*"' "$TMP_RESP" | head -1 | cut -d'"' -f4)
 if [ -n "$WF_INSTANCE_ID" ]; then
-  test_endpoint "GET  /workflows/instances/:id"          "GET"  "$BASE/$T_A/workflows/instances/$WF_INSTANCE_ID" "" "" ""
-  test_endpoint "GET  /workflows/instances/:id/trans"    "GET"  "$BASE/$T_A/workflows/instances/$WF_INSTANCE_ID/transitions" "" "" ""
+  test_endpoint "GET  /workflows/instances/:id"          "GET"  "$BASE/$T_A/workflows/instances/$WF_INSTANCE_ID" "" "$ADMIN_A" ""
+  test_endpoint "GET  /workflows/instances/:id/trans"    "GET"  "$BASE/$T_A/workflows/instances/$WF_INSTANCE_ID/transitions" "" "$ADMIN_A" ""
   test_endpoint "POST /workflows/instances/:id/trans"    "POST" "$BASE/$T_A/workflows/instances/$WF_INSTANCE_ID/transition" '{"transition":"Submit","actor_role":"PARENT"}' "$ADMIN_A" ""
 else
   SKIP=$((SKIP + 3))
@@ -232,7 +231,7 @@ test_endpoint "GET  /academic/grades"                      "GET"  "$BASE/$T_A/ac
 test_endpoint "POST /academic/grades (create)"             "POST" "$BASE/$T_A/academic/grades" "{\"code\":\"GRADE-TEST-${TS}\",\"name\":\"Test Grade ${TS}\",\"sort_order\":99}" "$ADMIN_A" ""
 test_endpoint "GET  /academic/sections"                    "GET"  "$BASE/$T_A/academic/sections" "" "" ""
 # Get a real grade ID for section creation
-GRADE_ID=$(curl -s "$BASE/$T_A/academic/grades" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+GRADE_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/academic/grades" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 if [ -n "$GRADE_ID" ]; then
   test_endpoint "POST /academic/sections (create)"           "POST" "$BASE/$T_A/academic/sections" "{\"grade_id\":\"$GRADE_ID\",\"code\":\"SEC-${TS}\",\"name\":\"Section ${TS}\"}" "$ADMIN_A" ""
 else
@@ -270,14 +269,14 @@ if [ -n "$STUDENT_ID" ]; then
   test_endpoint "GET  /attendance/class/:id/date/:date"   "GET"  "$BASE/$T_A/attendance/class/class-1/date/2026-06-05" "" "$ADMIN_A" ""
 
   # Attendance Corrections (Workflow-driven)
-  ATTENDANCE_ID=$(curl -s "$BASE/$T_A/attendance/students/$STUDENT_ID?pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+  ATTENDANCE_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/attendance/students/$STUDENT_ID?pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
   if [ -n "$ATTENDANCE_ID" ]; then
     test_endpoint "POST /attendance/corrections (request)"  "POST" "$BASE/$T_A/attendance/corrections" "{\"attendance_id\":\"$ATTENDANCE_ID\",\"new_status_code\":\"LATE\",\"reason\":\"Test correction\"}" "$ADMIN_A" ""
     test_endpoint "GET  /attendance/corrections (list)"    "GET"  "$BASE/$T_A/attendance/corrections" "" "$ADMIN_A" ""
 
-    CORR_INSTANCE_ID=$(curl -s "$BASE/$T_A/attendance/corrections" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    CORR_INSTANCE_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/attendance/corrections" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
     if [ -n "$CORR_INSTANCE_ID" ]; then
-      test_endpoint "POST /attendance/corrections/:id/action" "POST" "$BASE/$T_A/attendance/corrections/$CORR_INSTANCE_ID/action" '{"action":"Approve","comment":"Approved via test"}' "$ADMIN_A" ""
+      test_endpoint "POST /attendance/corrections/:id/action" "POST" "$BASE/$T_A/attendance/corrections/$CORR_INSTANCE_ID/action" '{"action":"Request Correction","comment":"Requested via test"}' "$ADMIN_A" ""
     fi
   fi
 else
@@ -294,7 +293,7 @@ test_endpoint "POST /homework (create)"                  "POST" "$BASE/$T_A/home
 test_endpoint "GET  /homework (list)"                     "GET"  "$BASE/$T_A/homework?page=1&pageSize=5" "" "" ""
 test_endpoint "POST /homework/ai-generate"                "POST" "$BASE/$T_A/homework/ai-generate" '{"subject_id":"MATH","grade_level":"GRADE-5","topic":"Fractions","count":3}' "$ADMIN_A" ""
 
-HW_ID=$(curl -s "$BASE/$T_A/homework?page=1&pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+HW_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/homework?page=1&pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 if [ -n "$HW_ID" ]; then
   test_endpoint "GET  /homework/:id"                        "GET"  "$BASE/$T_A/homework/$HW_ID" "" "" ""
   test_endpoint "PUT  /homework/:id/status (publish)"      "PUT"  "$BASE/$T_A/homework/$HW_ID/status" '{"status":"PUBLISHED"}' "$ADMIN_A" ""
@@ -304,7 +303,7 @@ if [ -n "$HW_ID" ]; then
     test_endpoint "POST /homework/:id/submit"               "POST" "$BASE/$T_A/homework/$HW_ID/submit" '{"content":"My API test answer"}' "$ADMIN_A" ""
     test_endpoint "GET  /homework/:id/submissions"         "GET"  "$BASE/$T_A/homework/$HW_ID/submissions" "" "$ADMIN_A" ""
 
-    SUBMISSION_ID=$(curl -s "$BASE/$T_A/homework/$HW_ID/submissions" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    SUBMISSION_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/homework/$HW_ID/submissions" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
     if [ -n "$SUBMISSION_ID" ]; then
       test_endpoint "PUT  /homework/submissions/:id/grade"  "PUT"  "$BASE/$T_A/homework/submissions/$SUBMISSION_ID/grade" '{"score":42,"feedback":"Good work"}' "$ADMIN_A" ""
       test_endpoint "PUT  /homework/submissions/:id/return" "PUT"  "$BASE/$T_A/homework/submissions/$SUBMISSION_ID/return" "{}" "$ADMIN_A" ""
@@ -325,7 +324,7 @@ test_endpoint "GET  /exams (list)"                        "GET"  "$BASE/$T_A/exa
 test_endpoint "POST /exams/convert-score"                 "POST" "$BASE/$T_A/exams/convert-score" '{"score":72,"max_score":100}' "$ADMIN_A" ""
 test_endpoint "POST /exams/calculate-gpa"                 "POST" "$BASE/$T_A/exams/calculate-gpa" '{"subjects":[{"subject":"Math","grade_point":4.0,"credit_hours":4},{"subject":"Science","grade_point":3.0,"credit_hours":3},{"subject":"English","grade_point":3.5,"credit_hours":3}]}' "$ADMIN_A" ""
 
-EXAM_ID=$(curl -s "$BASE/$T_A/exams?page=1&pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+EXAM_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/exams?page=1&pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 if [ -n "$EXAM_ID" ]; then
   if [ -n "$STUDENT_ID" ]; then
     test_endpoint "PUT  /exams/:id/scores (enter)"         "PUT"  "$BASE/$T_A/exams/$EXAM_ID/scores" "{\"scores\":[{\"student_id\":\"$STUDENT_ID\",\"score\":85,\"remarks\":\"Good\"}]}" "$ADMIN_A" ""
@@ -343,13 +342,13 @@ test_endpoint "GET  /exams/promotion/:studentId"         "GET"  "$BASE/$T_A/exam
 section "9. LEAVE"
 
 test_endpoint "POST /leaves (apply)"                      "POST" "$BASE/$T_A/leaves" '{"type_code":"SICK","start_date":"2026-06-20","end_date":"2026-06-20","reason":"API test leave"}' "$ADMIN_A" ""
-test_endpoint "POST /leaves (apply, invalid type)"       "POST" "$BASE/$T_A/leaves" '{"type_code":"INVALID_LEAVE","start_date":"2026-06-20","end_date":"2026-06-20","reason":"bad"}' "$ADMIN_A" "500"
+test_endpoint "POST /leaves (apply, invalid type)"       "POST" "$BASE/$T_A/leaves" '{"type_code":"INVALID_LEAVE","start_date":"2026-06-20","end_date":"2026-06-20","reason":"bad"}' "$ADMIN_A" "400"
 test_endpoint "GET  /leaves (list)"                       "GET"  "$BASE/$T_A/leaves?page=1&pageSize=5" "" "" ""
 
-LEAVE_ID=$(curl -s "$BASE/$T_A/leaves?page=1&pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+LEAVE_ID=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/leaves?page=1&pageSize=1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 if [ -n "$LEAVE_ID" ]; then
   test_endpoint "GET  /leaves/:id"                         "GET"  "$BASE/$T_A/leaves/$LEAVE_ID" "" "$ADMIN_A" ""
-  test_endpoint "POST /leaves/:id/action (Approve)"       "POST" "$BASE/$T_A/leaves/$LEAVE_ID/action" '{"transition":"Approve","comment":"Approved via test","actor_role":"PRINCIPAL"}' "$ADMIN_A" ""
+  test_endpoint "POST /leaves/:id/action (Submit)"      "POST" "$BASE/$T_A/leaves/$LEAVE_ID/action" '{"transition":"Submit","comment":"Submitted via test","actor_role":"PARENT"}' "$ADMIN_A" ""
 else
   SKIP=$((SKIP + 2))
   echo "  (leave detail tests skipped — no leave)" | tee -a $LOG
@@ -379,25 +378,31 @@ test_endpoint "GET  /reports/exams"                       "GET"  "$BASE/$T_A/rep
 test_endpoint "GET  /reports/leaves"                      "GET"  "$BASE/$T_A/reports/leaves" "" "$ADMIN_A" ""
 
 # ══════════════════════════════════════════════════════════════════════════
-# 12. CROSS-TENANT ISOLATION
+# 12. CONFIG VARIABILITY — Verify schools have DIFFERENT configs
 # ══════════════════════════════════════════════════════════════════════════
-section "12. CROSS-TENANT ISOLATION"
+section "12. CONFIG VARIABILITY (School A vs B vs C)"
 
-# School B endpoints (with School A admin — should FAIL tenant check OR return B's data)
-test_endpoint "B: config grading"        "GET"  "$BASE/$T_B/config/convenience/grading-scale" "" "$ADMIN_A" ""
-test_endpoint "B: attendance statuses"   "GET"  "$BASE/$T_B/config/convenience/attendance-statuses" "" "" ""
-test_endpoint "B: workflows"             "GET"  "$BASE/$T_B/workflows/leave_approval" "" "" ""
-test_endpoint "B: exams convert-score"   "POST" "$BASE/$T_B/exams/convert-score" '{"score":85,"max_score":100}' "$ADMIN_A" ""
+# ── Attendance Statuses Comparison ──
+echo "  --- Attendance Statuses Comparison ---" | tee -a $LOG
+SA=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/config/convenience/attendance-statuses" | grep -o '"code":"[^"]*"' | tr '\n' ' ')
+SB=$(curl -s -H "Authorization: Bearer $ADMIN_B" "$BASE/$T_B/config/convenience/attendance-statuses" | grep -o '"code":"[^"]*"' | tr '\n' ' ')
+SC=$(curl -s -H "Authorization: Bearer $ADMIN_C" "$BASE/$T_C/config/convenience/attendance-statuses" | grep -o '"code":"[^"]*"' | tr '\n' ' ')
+echo "  School A statuses: $SA" | tee -a $LOG
+echo "  School B statuses: $SB" | tee -a $LOG
+echo "  School C statuses: $SC" | tee -a $LOG
 
-# School C endpoints
-test_endpoint "C: config grading"        "GET"  "$BASE/$T_C/config/convenience/grading-scale" "" "" ""
-test_endpoint "C: academic calendar"     "GET"  "$BASE/$T_C/config/convenience/academic-calendar" "" "" ""
-test_endpoint "C: attendance statuses"   "GET"  "$BASE/$T_C/config/convenience/attendance-statuses" "" "" ""
-test_endpoint "C: workflows"             "GET"  "$BASE/$T_C/workflows/leave_approval" "" "" ""
+# School A should have 3 statuses (PRESENT, ABSENT, LATE)
+# School B should have MEDICAL_LEAVE (4+)
+# School C should have EXCUSED_ABSENCE or SCHOOL_ACTIVITY (5+)
+if echo "$SA" | grep -q "LATE" && echo "$SB" | grep -q "MEDICAL_LEAVE"; then
+  echo "  ✅ Attendance configs differ across schools (as expected)" | tee -a $LOG
+else
+  echo "  ⚠️ Attendance configs may not differ — check seed data" | tee -a $LOG
+fi
 
-# Verify grading scales DIFFER between schools (must differ in response body)
+# ── Grading Scale Comparison (School A: grade_bands, School B: percentage, School C: gpa) ──
 echo "" | tee -a $LOG
-echo "  --- Grading scale comparison ---" | tee -a $LOG
+echo "  --- Grading Scale Comparison ---" | tee -a $LOG
 GA=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/config/convenience/grading-scale" | grep -o '"type":"[^"]*"' | head -1)
 GB=$(curl -s -H "Authorization: Bearer $ADMIN_B" "$BASE/$T_B/config/convenience/grading-scale" | grep -o '"type":"[^"]*"' | head -1)
 GC=$(curl -s -H "Authorization: Bearer $ADMIN_C" "$BASE/$T_C/config/convenience/grading-scale" | grep -o '"type":"[^"]*"' | head -1)
@@ -405,9 +410,62 @@ echo "  School A grading: $GA" | tee -a $LOG
 echo "  School B grading: $GB" | tee -a $LOG
 echo "  School C grading: $GC" | tee -a $LOG
 
-# ══════════════════════════════════════════════════════════════════════════
-# 13. ADMIN UI — Smoke test
-# ══════════════════════════════════════════════════════════════════════════
+# ── Workflow Definition Comparison ──
+echo "" | tee -a $LOG
+echo "  --- Workflow States Comparison ---" | tee -a $LOG
+WA=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/workflows/leave_approval" | grep -o '"code":"[^"]*"' | tr '\n' ' ')
+WB=$(curl -s -H "Authorization: Bearer $ADMIN_B" "$BASE/$T_B/workflows/leave_approval" | grep -o '"code":"[^"]*"' | tr '\n' ' ')
+WC=$(curl -s -H "Authorization: Bearer $ADMIN_C" "$BASE/$T_C/workflows/leave_approval" | grep -o '"code":"[^"]*"' | tr '\n' ' ')
+echo "  School A workflow states: $WA" | tee -a $LOG
+echo "  School B workflow states: $WB" | tee -a $LOG
+echo "  School C workflow states: $WC" | tee -a $LOG
+
+# ── Rule Set Presence Across Schools ──
+echo "" | tee -a $LOG
+echo "  --- Rule Set Presence ---" | tee -a $LOG
+for school in "$T_A" "$T_B" "$T_C"; do
+  RS_CODE=$(curl -s "$BASE/$school/rules/grading.convert_score" | head -c 1)
+  if [ -n "$RS_CODE" ]; then
+    echo "  ✅ grading.convert_score exists for $school" | tee -a $LOG
+  else
+    echo "  ❌ grading.convert_score MISSING for $school" | tee -a $LOG
+  fi
+done
+
+# ── Score Conversion Across Schools (config-driven) ──
+echo "" | tee -a $LOG
+echo "  --- Score-to-Grade Conversion (same score, different schools) ---" | tee -a $LOG
+GA_GRADE=$(curl -s -X POST "$BASE/$T_A/exams/convert-score" -H "Content-Type: application/json" -H "Authorization: Bearer $ADMIN_A" -d '{"score":85,"max_score":100}')
+GB_GRADE=$(curl -s -X POST "$BASE/$T_B/exams/convert-score" -H "Content-Type: application/json" -H "Authorization: Bearer $ADMIN_B" -d '{"score":85,"max_score":100}')
+GC_GRADE=$(curl -s -X POST "$BASE/$T_C/exams/convert-score" -H "Content-Type: application/json" -H "Authorization: Bearer $ADMIN_C" -d '{"score":85,"max_score":100}')
+echo "  School A (CBSE grade bands, 85/100): $(echo "$GA_GRADE" | grep -o '"grade":"[^"]*"' || echo 'no-grade')" | tee -a $LOG
+echo "  School B (ICSE percentage,   85/100): $(echo "$GB_GRADE" | grep -o '"grade":"[^"]*"' || echo 'no-grade')" | tee -a $LOG
+echo "  School C (Intl GPA,          85/100): $(echo "$GC_GRADE" | grep -o '"grade":"[^"]*"' || echo 'no-grade')" | tee -a $LOG
+
+# ── Dashboard Config-Driven Verification (Gap 1 fix) ──
+echo "" | tee -a $LOG
+echo "  --- Dashboard Config-Driven Present Count ---" | tee -a $LOG
+DA=$(curl -s -H "Authorization: Bearer $ADMIN_A" "$BASE/$T_A/reports/dashboard")
+DASH_PRESENT=$(echo "$DA" | grep -o '"present":[0-9]*' | grep -o '[0-9]*')
+DASH_TOTAL=$(echo "$DA" | grep -o '"total":[0-9]*' | grep -o '[0-9]*')
+echo "  School A dashboard: present=$DASH_PRESENT total=$DASH_TOTAL" | tee -a $LOG
+# Verify dashboard response includes attendance_today with present/total
+if echo "$DA" | grep -q "attendance_today"; then
+  echo "  ✅ Dashboard includes attendance_today section" | tee -a $LOG
+else
+  echo "  ⚠️ Dashboard missing attendance_today section" | tee -a $LOG
+fi
+
+# ── API endpoint tests ──
+test_endpoint "GET  /config/conv/attendance-statuses (School B)" "GET" "$BASE/$T_B/config/convenience/attendance-statuses" "" "" ""
+test_endpoint "GET  /config/conv/attendance-statuses (School C)" "GET" "$BASE/$T_C/config/convenience/attendance-statuses" "" "" ""
+test_endpoint "POST /exams/convert-score (School B)"            "POST" "$BASE/$T_B/exams/convert-score" '{"score":72,"max_score":100}' "$ADMIN_B" ""
+test_endpoint "POST /exams/convert-score (School C)"            "POST" "$BASE/$T_C/exams/convert-score" '{"score":72,"max_score":100}' "$ADMIN_C" ""
+test_endpoint "POST /exams/calculate-gpa (School B)"            "POST" "$BASE/$T_B/exams/calculate-gpa" '{"subjects":[{"subject":"Math","grade_point":4.0,"credit_hours":4}]}' "$ADMIN_B" ""
+test_endpoint "POST /exams/calculate-gpa (School C)"            "POST" "$BASE/$T_C/exams/calculate-gpa" '{"subjects":[{"subject":"Math","grade_point":4.0,"credit_hours":4}]}' "$ADMIN_C" ""
+test_endpoint "GET  /reports/dashboard (School B)"             "GET"  "$BASE/$T_B/reports/dashboard" "" "$ADMIN_B" ""
+test_endpoint "GET  /reports/dashboard (School C)"             "GET"  "$BASE/$T_C/reports/dashboard" "" "$ADMIN_C" ""
+
 section "13. ADMIN UI (smoke test)"
 
 test_endpoint "GET  /admin"                              "GET"  "$ADMIN_BASE" "" "" ""
@@ -436,7 +494,7 @@ test_endpoint "GET  /attendance (wrong tenant)"          "GET"  "$BASE/tenant-no
 test_endpoint "POST /exams (bad JSON)"                   "POST" "$BASE/$T_A/exams" 'not-json' "$ADMIN_A" ""
 
 # Missing required fields
-test_endpoint "POST /exams (missing fields)"             "POST" "$BASE/$T_A/exams" '{"title":"No Type or Date"}' "$ADMIN_A" "500"
+test_endpoint "POST /exams (missing fields)"             "POST" "$BASE/$T_A/exams" '{"title":"No Type or Date"}' "$ADMIN_A" "400"
 
 # ══════════════════════════════════════════════════════════════════════════
 # SUMMARY

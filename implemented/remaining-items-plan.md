@@ -1,9 +1,39 @@
 # Implementation Status
 
-> **Last Updated:** 2026-06-05 23:30  
-> **Status:** ✅ Phase 0 Complete | ✅ Phase 1 Complete | ⬜ Phase 2 — Ready to Start  
-> **Test Suite:** 7 files, 94 unit tests, all passing  
+> **Last Updated:** 2026-06-06  
+> **Status:** ✅ Phase 0 Complete | ✅ Phase 1 Complete (3 audit gaps fixed) | ⬜ Phase 2 — Ready to Start  
+> **Test Suite:** 9 files (~144 tests), unit tests all passing  
 > **API Tests:** 88/102 passing, 1 known API gap, 13 skipped (no students in DB)
+
+---
+
+## 🔍 Audit Gaps — Found 2026-06-06
+
+Three gaps identified during spec-vs-implementation audit. See audit report for details.
+
+### Gap 1 — Hardcoded Statuses in Reporting Dashboard ✅ FIXED
+
+| Field | Detail |
+|-------|--------|
+| **Severity** | Medium — violates config-driven principle |
+| **Fix** | `reporting.service.ts`: Injected `ConfigurationEngine`, replaced hardcoded `'PRESENT'\|'LATE'\|'MEDICAL'` with `configEngine.getAttendanceStatuses()` filtered by `is_present` flag |
+| **Files** | `server/src/modules/reporting/reporting.module.ts`, `server/src/modules/reporting/services/reporting.service.ts` |
+
+### Gap 2 — Missing Config Variability Tests ✅ CREATED
+
+| Field | Detail |
+|-------|--------|
+| **File** | `server/test/integration/config-variability.spec.ts` |
+| **Tests** | Attendance (3 configs: status validation), Grading (score→grade conversion across 3 schools, GPA calculation, promotion eligibility), Leave (workflow definitions + transitions per school), Rules Engine (rule set presence + evaluation modes) |
+| **Count** | ~25 tests across 4 describe blocks |
+
+### Gap 3 — Missing Business Module Integration Tests ✅ CREATED
+
+| Field | Detail |
+|-------|--------|
+| **File** | `server/test/integration/business-modules.spec.ts` |
+| **Tests** | Cross-tenant isolation (5 endpoints), Authentication (6: missing/invalid token, login, me, refresh), CRUD (attendance statuses, dashboard, config API, grades, subjects, students, homework, search, notifications) |
+| **Count** | ~25 tests across 8 describe blocks |
 
 ---
 
@@ -192,6 +222,8 @@ server/src/modules/reporting/README.md
 server/src/modules/reporting/permissions.md
 server/src/modules/reporting/error-codes.md
 implemented/remaining-items-plan.md
+server/test/integration/config-variability.spec.ts
+server/test/integration/business-modules.spec.ts
 ```
 
 ### Modified Files

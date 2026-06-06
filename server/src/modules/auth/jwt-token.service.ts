@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as jose from 'jose';
 import { PrismaService } from '@core/prisma/prisma.service';
 import { RbacService } from './rbac.service';
@@ -50,7 +50,7 @@ export class JwtTokenService {
       where: { id: userId },
       include: { tenant: true },
     });
-    if (!user) throw new Error('User not found');
+    if (!user) throw new NotFoundException('User not found');
 
     const permissions = await this.getUserPermissions(user.id, user.role);
 
@@ -98,7 +98,7 @@ export class JwtTokenService {
       where: { token: refreshToken },
     });
     if (!stored || stored.expires_at < new Date() || stored.revoked_at) {
-      throw new Error('Invalid or expired refresh token');
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     // Revoke old refresh token
@@ -131,7 +131,7 @@ export class JwtTokenService {
       where: { id: userId },
       include: { tenant: true },
     });
-    if (!user) throw new Error('User not found');
+    if (!user) throw new NotFoundException('User not found');
 
     const permissions = await this.getUserPermissions(user.id, user.role);
 
@@ -162,7 +162,7 @@ export class JwtTokenService {
       where: { email },
       include: { tenant: true },
     });
-    if (!user) throw new Error('User not found');
+    if (!user) throw new NotFoundException('User not found');
 
     // Update last login
     await this.prisma.user.update({

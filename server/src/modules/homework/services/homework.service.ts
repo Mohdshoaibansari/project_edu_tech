@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@core/prisma/prisma.service';
 import { ConfigurationEngine } from '@engines/config/configuration-engine.service';
 import { RulesEngine } from '@engines/rules/rules-engine.service';
@@ -29,7 +29,7 @@ export class HomeworkService {
     // Validate category against tenant's configured categories
     const categories = await this.configEngine.getHomeworkCategories(tenantId);
     if (!categories.find((c: any) => c.code === data.category_code)) {
-      throw new Error(`Invalid homework category: ${data.category_code}`);
+      throw new BadRequestException(`Invalid homework category: ${data.category_code}`);
     }
 
     const homework = await this.prisma.homework.create({
@@ -83,13 +83,13 @@ export class HomeworkService {
       where: { id: homeworkId, tenant_id: tenantId },
       include: { submissions: true },
     });
-    if (!homework) throw new Error('Homework not found');
+    if (!homework) throw new NotFoundException('Homework not found');
     return homework;
   }
 
   async updateHomeworkStatus(tenantId: string, homeworkId: string, status: string) {
     if (!HOMEWORK_STATES.includes(status as any)) {
-      throw new Error(`Invalid status: ${status}. Valid: ${HOMEWORK_STATES.join(', ')}`);
+      throw new BadRequestException(`Invalid status: ${status}. Valid: ${HOMEWORK_STATES.join(', ')}`);
     }
 
     const homework = await this.prisma.homework.update({
@@ -119,7 +119,7 @@ export class HomeworkService {
     // Check homework exists and is published
     const homework = await this.getHomeworkById(tenantId, homeworkId);
     if (homework.status !== 'PUBLISHED') {
-      throw new Error('Cannot submit to homework that is not published');
+      throw new BadRequestException('Cannot submit to homework that is not published');
     }
 
     const result = await this.prisma.homeworkSubmission.upsert({
@@ -160,7 +160,7 @@ export class HomeworkService {
       where: { id: submissionId, tenant_id: tenantId },
       include: { homework: true },
     });
-    if (!submission) throw new Error('Submission not found');
+    if (!submission) throw new NotFoundException('Submission not found');
 
     // Use RulesEngine to convert score to grade based on tenant's grading scale
     let grade: string | null = null;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@core/prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 
@@ -78,7 +78,7 @@ export class RbacService {
     const permission = await this.prisma.permission.findUnique({
       where: { code: permissionCode },
     });
-    if (!permission) throw new Error(`Permission ${permissionCode} not found`);
+    if (!permission) throw new NotFoundException(`Permission ${permissionCode} not found`);
 
     return this.prisma.rolePermission.create({
       data: { role, permission_id: permission.id },
@@ -100,7 +100,7 @@ export class RbacService {
     const permission = await this.prisma.permission.findUnique({
       where: { code: permissionCode },
     });
-    if (!permission) throw new Error(`Permission ${permissionCode} not found`);
+    if (!permission) throw new NotFoundException(`Permission ${permissionCode} not found`);
 
     return this.prisma.userPermission.create({
       data: { user_id: userId, permission_id: permission.id },
@@ -149,7 +149,7 @@ export class RbacService {
     const permission = await this.prisma.permission.findUnique({
       where: { code: permissionCode },
     });
-    if (!permission) throw new Error(`Permission ${permissionCode} not found`);
+    if (!permission) throw new NotFoundException(`Permission ${permissionCode} not found`);
 
     return this.prisma.rolePermission.upsert({
       where: { role_permission_id: { role, permission_id: permission.id } },

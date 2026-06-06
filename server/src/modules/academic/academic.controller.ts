@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Param, Query, Body, HttpCode, HttpStatus,
+  Controller, Get, Post, Param, Query, Body, HttpCode, HttpStatus, NotFoundException,
 } from '@nestjs/common';
 import { AcademicStructureService } from './academic-structure.service';
 import { RequirePermission } from '@modules/auth/guards/auth.guards';
@@ -80,7 +80,7 @@ export class AcademicController {
   @Get('students/:studentId')
   async getStudent(@Param('tenantId') tenantId: string, @Param('studentId') studentId: string) {
     const student = await this.academicService.getStudent(tenantId, studentId);
-    if (!student) throw new Error(`Student ${studentId} not found`);
+    if (!student) throw new NotFoundException(`Student ${studentId} not found`);
     return { data: student };
   }
 

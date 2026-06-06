@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@core/prisma/prisma.service';
 import { ConfigurationEngine } from '@engines/config/configuration-engine.service';
 import { RulesEngine } from '@engines/rules/rules-engine.service';
@@ -19,7 +19,7 @@ export class ExamService {
   }) {
     const types = await this.configEngine.getAssessmentTypes(tenantId);
     if (!types.find((t: any) => t.code === data.type_code)) {
-      throw new Error(`Invalid exam type: ${data.type_code}`);
+      throw new BadRequestException(`Invalid exam type: ${data.type_code}`);
     }
     return this.prisma.exam.create({ data: { tenant_id: tenantId, ...data, date: new Date(data.date) } });
   }
@@ -39,7 +39,7 @@ export class ExamService {
 
   async enterScores(tenantId: string, examId: string, scores: { student_id: string; score: number; is_absent?: boolean; remarks?: string }[]) {
     const exam = await this.prisma.exam.findFirst({ where: { id: examId, tenant_id: tenantId } });
-    if (!exam) throw new Error('Exam not found');
+    if (!exam) throw new NotFoundException('Exam not found');
 
     const results = [];
     for (const s of scores) {

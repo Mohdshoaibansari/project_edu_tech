@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@core/prisma/prisma.service';
 import { ConfigurationEngine } from '@engines/config/configuration-engine.service';
 import { RulesEngine } from '@engines/rules/rules-engine.service';
@@ -41,7 +41,7 @@ export class AttendanceService {
 
     for (const record of records) {
       if (!validCodes.has(record.status_code)) {
-        throw new Error(`Invalid status "${record.status_code}". Valid: ${[...validCodes].join(', ')}`);
+        throw new BadRequestException(`Invalid status "${record.status_code}". Valid: ${[...validCodes].join(', ')}`);
       }
 
       try {
@@ -73,7 +73,7 @@ export class AttendanceService {
         results.push(attendance);
         this.eventBus.emit('attendance.marked', { tenantId, studentId: record.student_id, classId, statusCode: record.status_code, date });
       } catch (e: any) {
-        throw new Error(`Attendance mark failed for student ${record.student_id}: ${e.message}`);
+        throw new BadRequestException(`Attendance mark failed for student ${record.student_id}: ${e.message}`);
       }
     }
     return results;
@@ -186,12 +186,12 @@ export class AttendanceService {
     const attendance = await this.prisma.attendance.findFirst({
       where: { id: attendanceId, tenant_id: tenantId },
     });
-    if (!attendance) throw new Error(`Attendance record ${attendanceId} not found`);
+    if (!attendance) throw new NotFoundException(`Attendance record ${attendanceId} not found`);
 
     // Validate new status
     const statuses = await this.getValidStatuses(tenantId);
     if (!statuses.find((s: any) => s.code === newStatusCode)) {
-      throw new Error(`Invalid status "${newStatusCode}"`);
+      throw new BadRequestException(`Invalid status "${newStatusCode}"`);
     }
 
     // Start correction workflow

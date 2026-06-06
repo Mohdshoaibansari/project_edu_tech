@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@core/prisma/prisma.service';
+import { ConfigurationEngine } from '@engines/config/configuration-engine.service';
 
 @Injectable()
 export class ReportingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configEngine: ConfigurationEngine,
+  ) {}
 
   async getAttendanceReport(tenantId: string, filters?: { class_id?: string; student_id?: string; from?: string; to?: string }) {
     const where: any = { tenant_id: tenantId };
@@ -52,10 +56,10 @@ export class ReportingService {
       this.prisma.homework.count({ where: { tenant_id: tenantId, status: 'PUBLISHED' } }),
     ]);
 
-    const present = todayAttendance.filter((a) => {
-      // Simple check — in production, load from ConfigEngine
-      return a.status_code === 'PRESENT' || a.status_code === 'LATE' || a.status_code === 'MEDICAL';
-    }).length;
+    // Config-driven: load tenant's attendance statuses, check is_present flag
+    const statuses = await this.configEngine.getAttendanceStatuses(tenantId);
+    const presentCodes = new Set(statuses.filter((s: any) => s.is_present).map((s: any) => s.code));
+    const present = todayAttendance.filter((a) => presentCodes.has(a.status_code)).length;
 
     return {
       data: {
