@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { Request, Response, NextFunction } from 'express';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -24,6 +25,14 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Redirect root to admin dashboard
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/') {
+      return res.redirect('/admin');
+    }
+    next();
+  });
 
   app.setGlobalPrefix('api/v1', {
     exclude: ['admin', 'admin/(.*)'],

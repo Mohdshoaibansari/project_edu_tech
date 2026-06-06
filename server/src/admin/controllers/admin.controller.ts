@@ -11,10 +11,49 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AdminService } from '../services/admin.service';
+import { JwtTokenService } from '@modules/auth/jwt-token.service';
 
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly jwtService: JwtTokenService,
+  ) {}
+
+  // ==========================================================================
+  // Authentication
+  // ==========================================================================
+
+  @Get('login')
+  @Render('login')
+  loginForm(@Query('error') error: string) {
+    return { title: 'Admin Login', error: error || null };
+  }
+
+  @Post('login')
+  async loginSubmit(
+    @Body() body: { email: string; password: string },
+    @Res() res: Response,
+  ) {
+    try {
+      const { tokens } = await this.jwtService.login(body.email, body.password);
+      res.cookie('admin_token', tokens.accessToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 15 * 60 * 1000, // 15 minutes
+      });
+      return res.redirect('/admin');
+    } catch (e: any) {
+      return res.redirect(`/admin/login?error=${encodeURIComponent(e.message || 'Login failed')}`);
+    }
+  }
+
+  @Get('logout')
+  logout(@Res() res: Response) {
+    res.clearCookie('admin_token');
+    return res.redirect('/admin/login');
+  }
 
   // ==========================================================================
   // Dashboard
@@ -22,13 +61,14 @@ export class AdminController {
 
   @Get()
   @Render('dashboard')
-  async dashboard() {
+  async dashboard(@Query('tenant_id') tenantId: string) {
     const tenants = await this.adminService.getTenants();
+    const activeTenantId = tenantId || tenants[0]?.id;
     return {
       title: 'EduTech Admin',
-      tenants: tenants.map((t) => ({ ...t, selected: false })),
-      activeTenant: tenants[0] || null,
-      activeTenantId: tenants[0]?.id || null,
+      tenants: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
+      activeTenant: tenants.find((t) => t.id === activeTenantId) || tenants[0],
+      activeTenantId,
       message: 'Phase 0 — Engine Foundation',
     };
   }
@@ -114,8 +154,7 @@ export class AdminController {
     const scale = activeTenantId ? await this.adminService.getGradingScale(activeTenantId) : null;
     return {
       title: 'Grading Scale',
-      tenants,
-      tenantsWithSelected: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
+      tenants: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
       activeTenant: tenants.find((t) => t.id === activeTenantId) || tenants[0],
       activeTenantId,
       scale,
@@ -143,8 +182,7 @@ export class AdminController {
       const scale = await this.adminService.getGradingScale(tenantId);
       return {
         title: 'Grading Scale',
-        tenants,
-        tenantsWithSelected: tenants.map((t) => ({ ...t, selected: t.id === tenantId })),
+        tenants: tenants.map((t) => ({ ...t, selected: t.id === tenantId })),
         activeTenant: tenants.find((t) => t.id === tenantId),
         activeTenantId: tenantId,
         scale,
@@ -162,8 +200,7 @@ export class AdminController {
       const scale = await this.adminService.getGradingScale(tenantId);
       return {
         title: 'Grading Scale',
-        tenants,
-        tenantsWithSelected: tenants.map((t) => ({ ...t, selected: t.id === tenantId })),
+        tenants: tenants.map((t) => ({ ...t, selected: t.id === tenantId })),
         activeTenant: tenants.find((t) => t.id === tenantId),
         activeTenantId: tenantId,
         scale,
@@ -252,8 +289,7 @@ export class AdminController {
     }));
     return {
       title: 'Workflow Definitions',
-      tenants,
-      tenantsWithSelected: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
+      tenants: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
       activeTenant: tenants.find((t) => t.id === activeTenantId) || tenants[0],
       activeTenantId,
       workflows: processedWorkflows,
@@ -281,8 +317,7 @@ export class AdminController {
     }));
     return {
       title: 'Rule Sets',
-      tenants,
-      tenantsWithSelected: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
+      tenants: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
       activeTenant: tenants.find((t) => t.id === activeTenantId) || tenants[0],
       activeTenantId,
       ruleSets: processedRuleSets,
@@ -298,11 +333,12 @@ export class AdminController {
   async seedTemplates(@Query('tenant_id') tenantId: string) {
     const tenants = await this.adminService.getTenants();
     const templates = await this.adminService.getTemplates();
+    const activeTenantId = tenantId || tenants[0]?.id;
     return {
       title: 'Seed Templates',
-      tenants,
-      activeTenant: tenants.find((t) => t.id === tenantId) || tenants[0],
-      activeTenantId: tenantId || tenants[0]?.id,
+      tenants: tenants.map((t) => ({ ...t, selected: t.id === activeTenantId })),
+      activeTenant: tenants.find((t) => t.id === activeTenantId) || tenants[0],
+      activeTenantId,
       templates,
       success: null,
       error: null,
@@ -321,7 +357,7 @@ export class AdminController {
       await this.adminService.loadTemplate(tenantId, body.template_id, body.schema_key);
       return {
         title: 'Seed Templates',
-        tenants,
+        tenants: tenants.map((t) => ({ ...t, selected: t.id === tenantId })),
         activeTenant: tenants.find((t) => t.id === tenantId),
         activeTenantId: tenantId,
         templates,
@@ -331,7 +367,7 @@ export class AdminController {
     } catch (e: any) {
       return {
         title: 'Seed Templates',
-        tenants,
+        tenants: tenants.map((t) => ({ ...t, selected: t.id === tenantId })),
         activeTenant: tenants.find((t) => t.id === tenantId),
         activeTenantId: tenantId,
         templates,

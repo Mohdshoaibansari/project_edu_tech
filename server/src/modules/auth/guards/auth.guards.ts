@@ -22,7 +22,7 @@ declare global {
 }
 
 // Paths that don't require JWT authentication (matched against request.url)
-const PUBLIC_PATHS = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/admin'];
+const PUBLIC_PATHS = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/admin']; // /admin uses cookie-based AdminAuthMiddleware instead
 
 /**
  * AuthGuard — Extracts JWT from Authorization header, verifies it, sets request.user.

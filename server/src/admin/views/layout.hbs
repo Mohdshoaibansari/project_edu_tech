@@ -18,9 +18,9 @@
 <body class="bg-gray-50 text-gray-800 min-h-screen">
   <div class="flex">
     <!-- Sidebar -->
-    <aside class="w-56 bg-gray-900 text-white min-h-screen p-4 sticky top-0">
+    <aside class="w-56 bg-gray-900 text-white min-h-screen p-4 sticky top-0 flex flex-col">
       <h1 class="text-lg font-bold mb-6">EduTech Admin</h1>
-      <nav class="space-y-1 text-sm">
+      <nav class="space-y-1 text-sm flex-1">
         <a href="/admin" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.dashboard}}bg-gray-700{{/if}}">Dashboard</a>
         <a href="/admin/attendance-statuses" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.attendance}}bg-gray-700{{/if}}">Attendance Statuses</a>
         <a href="/admin/grading-scale" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.grading}}bg-gray-700{{/if}}">Grading Scale</a>
@@ -29,6 +29,9 @@
         <a href="/admin/rules" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.rules}}bg-gray-700{{/if}}">Rule Sets</a>
         <a href="/admin/seed" class="block py-2 px-3 rounded hover:bg-gray-700 {{#if activePage.seed}}bg-gray-700{{/if}}">Seed Templates</a>
       </nav>
+      <div class="border-t border-gray-700 pt-3 mt-auto">
+        <a href="/admin/logout" class="block py-2 px-3 rounded text-sm text-gray-400 hover:bg-gray-700 hover:text-white">🚪 Sign Out</a>
+      </div>
     </aside>
 
     <!-- Main Content -->
@@ -37,12 +40,14 @@
       {{#if tenants.length}}
       <div class="mb-6 flex items-center gap-4">
         <label class="text-sm font-medium text-gray-600">Tenant:</label>
-        <select onchange="location.href='?tenant_id='+this.value"
-                class="border rounded px-3 py-1.5 text-sm bg-white">
-          {{#each tenants}}
-          <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}} ({{slug}})</option>
-          {{/each}}
-        </select>
+        <form method="GET" style="display:inline">
+          <select name="tenant_id" onchange="this.form.submit()"
+                  class="border rounded px-3 py-1.5 text-sm bg-white">
+            {{#each tenants}}
+            <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}} ({{slug}})</option>
+            {{/each}}
+          </select>
+        </form>
         {{#if activeTenant}}
         <span class="text-xs text-gray-400">{{activeTenantId}}</span>
         {{/if}}
